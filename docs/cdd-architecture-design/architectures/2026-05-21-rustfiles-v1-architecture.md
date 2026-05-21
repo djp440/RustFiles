@@ -79,6 +79,10 @@
 - 边界：
   - 不承载业务逻辑。
   - 不让前端绕过 Rust Core 直接访问危险系统能力。
+  - 只暴露本文档列出的 Tauri command；新增 command 必须先更新架构或实现计划。
+  - 禁止前端启用或使用 Tauri 文件系统插件直接写真实文件。
+  - 永久删除、覆盖、移动和冲突决策类 command 必须携带确认字段或确认令牌。
+  - 测试模式下，所有危险 command 必须经过统一测试根目录 guard。
 
 ### 4.3 Rust Core 总入口
 
@@ -89,6 +93,7 @@
 - 边界：
   - 所有真实文件系统副作用必须经过 Rust Core。
   - 所有命令入参必须经过路径规范化、权限边界和测试模式检查。
+  - 所有破坏性操作必须先经过路径安全模块分类和策略判断。
 
 ### 4.4 `fs` 文件浏览模块
 
@@ -114,6 +119,28 @@
   - 不直接处理 UI 展示。
   - 不在缺少二次确认时执行永久删除。
 
+任务状态机必须显式建模：
+
+| 状态 | 含义 | 可迁移到 |
+| --- | --- | --- |
+| `queued` | 已入队，未开始 | `validating`, `cancelling` |
+| `validating` | 路径、权限、确认令牌、测试根目录 guard 校验中 | `running`, `failed`, `cancelling` |
+| `running` | 正在执行 | `waiting_for_conflict_decision`, `cancelling`, `completed`, `failed`, `partially_completed` |
+| `waiting_for_conflict_decision` | 等待用户选择替换、跳过、保留两者或应用于全部 | `running`, `cancelling`, `failed` |
+| `cancelling` | 已请求取消，等待安全取消点 | `cancelled`, `partially_completed`, `failed` |
+| `cancelled` | 已取消，未继续执行 | 终态 |
+| `completed` | 全部完成 | 终态 |
+| `failed` | 失败且无进一步执行 | 终态 |
+| `partially_completed` | 部分完成，需要用户可见提示和后续处理建议 | 终态 |
+
+状态机约束：
+
+- 任务只能由 Rust 侧推进状态，React 只能请求取消或提交冲突选择。
+- 任何终态必须包含结果摘要。
+- `partially_completed` 必须列出已完成、未完成和未知状态项。
+- 复制失败的默认策略是保留已复制成功的文件，并以 `partially_completed` 明确提示；自动清理已复制文件属于额外危险操作，不作为默认回滚。
+- 移动失败必须优先保证源文件不丢失；跨卷移动按“复制成功后再删除对应源项”执行。
+
 ### 4.6 `scheduler` UI 优先调度模块
 
 - 职责：
@@ -125,7 +152,52 @@
   - 不改变文件操作的正确性语义。
   - 只能影响任务执行顺序、并发度和让步策略。
 
-### 4.7 `search` 搜索模块
+调度输入信号：
+
+- `active_tab_id`：当前前台标签页。
+- `visible_range`：当前文件列表可视行/格范围。
+- `last_input_at`：最近键盘、鼠标、触控板输入时间。
+- `is_scrolling`：当前是否处于滚动或惯性滚动窗口。
+- `interaction_epoch`：前端交互批次，用于丢弃过期缩略图和搜索事件。
+
+默认优先级：
+
+1. 前台标签页目录枚举和路径跳转。
+2. 当前可视区域缩略图。
+3. 前台搜索增量结果。
+4. 文件操作进度事件。
+5. 后台标签页目录刷新。
+6. 非可视区域缩略图。
+7. 后台递归搜索。
+
+事件背压：
+
+- `thumbnail_ready` 和 `search_result_batch` 必须批量合并发送，避免事件风暴拖慢前端。
+- 用户滚动期间可延迟非可视缩略图事件。
+- 前端接收到旧 `interaction_epoch` 或旧 `snapshot_version` 的事件时必须可丢弃。
+
+性能采样边界：
+
+- 冷启动：从用户启动二进制到主窗口首个可交互文件列表或空状态可见。
+- 普通文件夹打开：从导航请求发起到首批目录条目可交互。
+- 1 万文件目录首屏：从导航请求发起到首屏虚拟列表可滚动和可选择。
+- 滚动性能：在 1 万文件目录中连续滚动时采样帧时间，目标稳定接近 60fps。
+
+### 4.7 `path_safety` Windows 路径安全模块
+
+- 职责：
+  - 规范化 Windows 路径。
+  - 识别并分类 symlink、junction、mount point、其他 reparse point、UNC 路径、网络盘和 subst 盘。
+  - 在测试模式下对解析 reparse point 后的真实目标再次校验测试根目录。
+  - 校验新建和重命名的保留名、非法字符、尾随空格/点、大小写冲突和长路径策略。
+  - 为危险操作返回路径安全决策：允许、拒绝、需要确认或需要升级审查。
+- 边界：
+  - 不执行文件操作，只提供分类和 guard。
+  - 读路径可以展示 reparse point；破坏性递归操作默认不得跟随 reparse point 到目标树。
+  - V1 可以浏览 UNC 路径、网络盘或 subst 盘，但性能指标不得把这类路径并入普通本地磁盘达标结论。
+  - 测试模式下，任何 destructive operation 在解析真实目标后越过测试根目录都必须拒绝。
+
+### 4.8 `search` 搜索模块
 
 - 职责：
   - 当前目录文件名搜索。
@@ -137,7 +209,7 @@
   - 不做全盘索引。
   - 递归搜索必须可取消，并服从 UI 优先调度。
 
-### 4.8 `thumbnails` 缩略图模块
+### 4.9 `thumbnails` 缩略图模块
 
 - 职责：
   - 图片缩略图生成。
@@ -148,7 +220,7 @@
   - V1 不要求视频或 PDF 缩略图。
   - 缩略图失败不能阻塞文件列表。
 
-### 4.9 `settings` 设置模块
+### 4.10 `settings` 设置模块
 
 - 职责：
   - 持久化默认启动路径、默认视图、隐藏文件、扩展名、主题、排序偏好、缩略图开关和动效开关。
@@ -157,7 +229,7 @@
   - 设置写入失败必须可见。
   - 不存储敏感凭据。
 
-### 4.10 `system` Windows 集成模块
+### 4.11 `system` Windows 集成模块
 
 - 职责：
   - 删除到回收站。
@@ -169,8 +241,9 @@
 - 边界：
   - 所有系统集成失败必须返回结构化错误。
   - 任何需要管理员权限或修改系统配置的能力必须单独升级审查。
+  - 系统集成错误码至少区分：`recycle_bin_unavailable`、`default_app_open_failed`、`terminal_unavailable`、`properties_open_failed`、`permission_denied`、`path_not_found`。
 
-### 4.11 `observability` 观测模块
+### 4.12 `observability` 观测模块
 
 - 职责：
   - 结构化日志。
@@ -197,6 +270,22 @@
 - 当前标签路径、历史栈、视图模式、排序、过滤和滚动位置归 React 标签状态。
 - 文件系统真实状态归 Windows 文件系统。
 - 目录枚举结果是 Rust 生成的只读快照，React 可缓存但必须允许刷新。
+
+快照一致性规则：
+
+- `snapshot_version` 绑定路径、排序、过滤、隐藏文件设置和枚举时间。
+- 排序、过滤或隐藏文件设置变化必须产生新快照。
+- Rust 发现目录变化后发送 `directory_changed`，旧快照不再作为强一致依据，只能作为过渡展示。
+- 文件操作完成后必须刷新源目录、目标目录以及受影响父目录。
+- 多标签页可以持有同一路径的不同快照，但收到相关 `directory_changed` 后必须标记为需要刷新。
+- 搜索结果打开所在位置时，如果文件已经不存在，前端应展示“项目已不存在或已移动”，并刷新所在目录。
+
+`directory_changed` 事件至少包含：
+
+- `path`
+- `old_snapshot_version`
+- `reason`：文件操作完成、外部变化、设置变化、手动刷新或错误恢复。
+- `suggested_refresh_scope`：当前目录、父目录、源/目标目录、当前标签或所有相关标签。
 
 ### 5.2 搜索路径
 
@@ -227,7 +316,29 @@
 - 用户选择和弹窗展示归 React。
 - 操作审计归 Rust 本地日志。
 
-### 5.4 设置路径
+### 5.4 Clipboard / Drag Intent Contract
+
+V1 默认支持应用内剪切、复制、粘贴和拖拽，不把与 Windows 资源管理器之间的跨应用拖入/拖出作为 V1 必达能力。
+
+剪切/复制状态归属：
+
+- React 可以保存当前 UI 选择和视觉上的剪切态。
+- Rust 必须保存可执行的 pending clipboard operation，包括源路径列表、操作类型、创建时间、来源标签和路径安全分类。
+- 粘贴时 React 只提交目标目录和 pending operation id，不重新拼装源路径。
+- 如果源路径在粘贴前变化或消失，Rust 返回结构化错误，并清理或更新 pending operation。
+
+拖拽意图：
+
+- 应用内拖拽开始时，React 提交源项和用户意图，Rust 创建 drag operation id。
+- 拖拽释放时，React 提交目标目录、drag operation id 和用户选择的语义。
+- 默认语义：
+  - 同卷拖拽默认为移动。
+  - 跨卷拖拽默认为复制。
+  - 用户通过显式修饰键或菜单选择可以切换移动/复制。
+- Rust 在执行前重新校验源、目标、卷信息、reparse point 和冲突状态。
+- 跨应用拖拽与资源管理器互操作属于 V1.1 候选；如 V1 实现，只能作为受限增强，不得影响应用内语义。
+
+### 5.5 设置路径
 
 1. 启动时 Rust `settings` 读取配置。
 2. React 初始化主题、视图偏好和默认目录。
@@ -253,10 +364,18 @@
   - `delete_permanently(request) -> TaskId`
   - `copy_items(request) -> TaskId`
   - `move_items(request) -> TaskId`
+  - `create_clipboard_operation(request) -> ClipboardOperationId`
+  - `paste_clipboard_operation(request) -> TaskId`
+  - `create_drag_operation(request) -> DragOperationId`
+  - `drop_drag_operation(request) -> TaskId`
   - `resolve_conflict(request) -> TaskStatus`
+  - `get_task_status(task_id) -> TaskStatus`
 - 缩略图类：
   - `request_thumbnails(request) -> ThumbnailBatchStatus`
   - `cancel_thumbnail_requests(request) -> Ack`
+- 调度类：
+  - `report_viewport_state(request) -> Ack`
+  - `report_interaction_state(request) -> Ack`
 - 设置类：
   - `get_settings() -> Settings`
   - `update_settings(request) -> Settings`
@@ -267,7 +386,7 @@
 
 ### 6.2 Event 契约类别
 
-- `directory_changed`：目录内容变化或刷新建议。
+- `directory_changed`：目录内容变化或刷新建议，必须包含 `path`、`old_snapshot_version`、`reason` 和 `suggested_refresh_scope`。
 - `task_progress`：任务进度、速度、当前阶段。
 - `task_conflict`：任务暂停并等待冲突选择。
 - `task_completed`：任务完成。
@@ -278,19 +397,22 @@
 
 ### 6.3 关键数据结构
 
-- `FileEntry`：路径、名称、类型、大小、修改时间、是否隐藏、是否文件夹、图标类型、缩略图状态。
-- `DirectoryPage`：路径、条目列表、总数、分页窗口、排序、过滤、快照版本。
+- `FileEntry`：展示路径、真实路径、脱敏路径、名称、类型、大小、修改时间、是否隐藏、是否文件夹、是否 reparse point、图标类型、缩略图状态。
+- `DirectoryPage`：路径、条目列表、总数、分页窗口、排序、过滤、隐藏文件设置、快照版本、快照生成时间。
 - `TabState`：标签 id、路径、历史栈、视图模式、排序、过滤、搜索状态、滚动位置。
-- `FileTask`：任务 id、类型、源、目标、阶段、进度、错误、冲突、是否可取消。
+- `FileTask`：任务 id、类型、源、目标、状态、阶段、进度、错误、冲突、是否可取消、结果摘要。
 - `ConflictDecision`：替换、跳过、保留两者、应用于全部。
-- `Settings`：默认启动路径、默认视图、显示隐藏文件、显示扩展名、主题、排序偏好、缩略图开关、动效开关。
+- `ClipboardOperation`：操作 id、类型、源路径列表、来源标签、创建时间、路径安全分类。
+- `DragOperation`：操作 id、源路径列表、来源标签、默认语义、用户语义、创建时间。
+- `Settings`：`schema_version`、默认启动路径、默认视图、显示隐藏文件、显示扩展名、主题、排序偏好、缩略图开关、动效开关。
 
 ## 7. 存储与基础设施
 
 ### 7.1 持久化
 
-- 设置：使用本地配置文件或 Tauri 推荐应用数据目录。
-- 缩略图缓存：使用应用缓存目录，支持清理、失效和测试专用目录覆盖。
+- 设置：使用本地配置文件或 Tauri 推荐应用数据目录，包含 `schema_version`，并采用原子写入，避免设置文件半写坏。
+- 缩略图缓存：使用应用缓存目录，支持清理、失效和测试专用目录覆盖。缓存 key 默认由真实路径、mtime、size 和缩略图规格组成；如后续引入内容 hash，必须权衡 IO 成本。
+- 缩略图缓存必须设置最大体积、清理策略和失败条目退避策略。
 - 任务历史：V1 可以只保留运行时任务状态；若记录历史，只记录必要审计信息和脱敏路径。
 - 崩溃日志：V1.0 打磨阶段加入本地日志文件。
 
@@ -335,6 +457,7 @@
 ### 8.2 处理策略
 
 - 所有失败返回结构化错误：错误码、用户可读消息、是否可重试、是否需要刷新目录。
+- 错误码必须能区分路径不存在、权限不足、文件占用、目标已存在、回收站不可用、默认应用打开失败、终端不可用、属性窗口打开失败、缓存不可写和测试根目录越界。
 - 文件操作任务必须记录当前阶段，避免 UI 不知道真实状态。
 - 冲突处理必须暂停任务，不得在无用户选择时默认覆盖。
 - 永久删除必须由前端显示二次确认，并由 Rust 校验确认令牌或确认字段后执行。
@@ -345,7 +468,7 @@
 
 - 新建文件夹失败：不产生残留或返回已存在状态。
 - 重命名失败：保持原路径可见。
-- 复制失败：保留已复制部分并明确提示，后续实现计划需决定是否支持清理已复制部分。
+- 复制失败：保留已复制成功部分，进入 `partially_completed`，向用户展示已完成、未完成和未知状态；自动清理已复制部分不是默认行为。
 - 移动失败：优先保证源文件不丢失。
 - 删除到回收站失败：不得降级为永久删除。
 - 永久删除失败：显示失败状态，不得假装完成。
@@ -389,6 +512,7 @@
 - 前端测试：TypeScript 类型检查、组件/状态测试。
 - 桌面 e2e：后续可使用浏览器/桌面自动化工具驱动 Tauri 窗口，结合文件系统断言。
 - 性能验证：应用内性能采样日志 + 自动化脚本生成大目录夹具。
+- Windows 路径安全测试：必须覆盖 symlink、junction、其他 reparse point、UNC 路径、网络盘或 subst 盘可用性、长路径、保留名、非法字符和大小写冲突。
 
 ### 10.3 启动方式
 
@@ -411,6 +535,7 @@
   - 深层递归搜索目录。
   - 权限或占用场景。
 - 禁止在真实桌面、下载、文档、图片、视频、音乐目录执行删除、移动或覆盖测试。
+- 测试根目录 guard 必须在解析 reparse point 后再次校验，证明 destructive operation 无法通过 junction 或 symlink 逃逸测试根。
 
 ### 10.5 阶段级验收标准
 
@@ -433,16 +558,28 @@
 - React 不具备真实文件写入权限。
 - Rust Core 是唯一真实文件副作用入口。
 - 所有路径入参必须规范化，并拒绝测试模式下越过测试根目录的破坏性操作。
+- 路径 guard 必须在 Windows reparse point 解析后再次执行，防止 symlink、junction 或 mount point 逃逸。
+- 破坏性递归操作默认不得跟随 reparse point 到目标树。
+- 创建和重命名必须校验 Windows 保留名、非法字符、尾随空格/点、长路径和大小写冲突。
+- UNC 路径、网络盘和 subst 盘可以浏览，但危险操作必须经过路径分类；其性能不得计入普通本地磁盘指标。
 - 永久删除、覆盖和移动必须经过明确用户意图。
 - 任何管理员权限、系统配置修改或文件关联注册都不进入 V1 默认路径。
 
-### 11.2 敏感数据
+### 11.2 Tauri command 白名单
+
+- 只暴露本文档 `Command 契约类别` 中列出的 command。
+- 禁止启用可让前端直接写真实文件的 Tauri 文件系统插件或等价能力。
+- `delete_permanently`、覆盖类冲突 `resolve_conflict`、`move_items`、`drop_drag_operation` 等危险 command 必须携带确认字段或确认令牌。
+- 测试模式下危险 command 必须统一经过测试根目录 guard。
+- 新增危险 command 必须先更新架构文档或实现计划，并经过人工审核。
+
+### 11.3 敏感数据
 
 - 日志和任务历史默认不上传。
 - 路径、文件名和用户目录属于隐私信息。
 - 可共享日志需要脱敏。
 
-### 11.3 性能热点
+### 11.4 性能热点
 
 - 大目录枚举。
 - 虚拟列表渲染。
@@ -513,14 +650,17 @@
 
 - Rust 后端唯一写入者边界。
 - Tauri command/event 契约。
+- Tauri command 白名单与危险操作确认令牌。
 - 统一错误模型。
 - 任务状态机。
-- 测试根目录和夹具生成工具。
+- Windows 路径安全模块。
+- 测试根目录 guard 和夹具生成工具。
 - 性能采样与日志。
 
 ### 14.3 高风险模块
 
 - `tasks` 文件操作任务模块。
+- `path_safety` Windows 路径安全模块。
 - `system` Windows 回收站、默认应用、终端和属性集成。
 - `scheduler` UI 优先调度。
 - `thumbnails` 缓存与解码。
