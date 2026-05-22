@@ -21,7 +21,7 @@ target/
 /src-tauri/icons/icon.ico
 /src-tauri/icons/*.png
 !/src-tauri/icons/.gitkeep
-
+/src-tauri/.tmp/
 # Tests and local fixtures
 /test-results/
 /playwright-report/
