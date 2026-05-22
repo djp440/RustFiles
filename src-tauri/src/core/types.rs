@@ -20,6 +20,14 @@ pub struct DirectoryPage {
     pub filter_kind: FilterKind,
     pub show_hidden: bool,
     pub snapshot_version: u64,
+    pub offset: usize,
+    pub limit: usize,
+}
+
+impl DirectoryPage {
+    pub fn is_paginated(&self) -> bool {
+        self.limit != usize::MAX
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

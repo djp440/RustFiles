@@ -3,6 +3,7 @@ use std::path::Path;
 use std::time::SystemTime;
 
 use crate::core::error::{AppError, ErrorCode};
+use crate::core::snapshot;
 use crate::core::types::{DirectoryPage, FileEntry, FilterKind, SortKey};
 
 pub fn list_directory(
@@ -11,6 +12,18 @@ pub fn list_directory(
     sort_ascending: bool,
     filter_kind: &FilterKind,
     show_hidden: bool,
+) -> Result<DirectoryPage, AppError> {
+    list_directory_paginated(path, sort_key, sort_ascending, filter_kind, show_hidden, 0, usize::MAX)
+}
+
+pub fn list_directory_paginated(
+    path: &str,
+    sort_key: &SortKey,
+    sort_ascending: bool,
+    filter_kind: &FilterKind,
+    show_hidden: bool,
+    offset: usize,
+    limit: usize,
 ) -> Result<DirectoryPage, AppError> {
     let p = Path::new(path);
     if !p.exists() {
@@ -169,24 +182,20 @@ pub fn list_directory(
     });
 
     let total_count = entries.len();
+    let snapshot_version = snapshot::compute_snapshot_version(&p.to_string_lossy(), total_count);
 
-    let dir_mtime_ms = std::fs::metadata(p)
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-
-    let snapshot_version = (dir_mtime_ms as u64) * 31 + (total_count as u64);
+    let sliced_entries: Vec<FileEntry> = entries.into_iter().skip(offset).take(limit).collect();
 
     Ok(DirectoryPage {
         path: p.to_string_lossy().to_string(),
-        entries,
+        entries: sliced_entries,
         total_count,
         sort_key: sort_key.clone(),
         sort_ascending,
         filter_kind: filter_kind.clone(),
         show_hidden,
         snapshot_version,
+        offset,
+        limit,
     })
 }

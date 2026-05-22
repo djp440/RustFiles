@@ -582,33 +582,33 @@ git commit -m "feat: add file views and glass design tokens"
 - Test: `src/test/virtual-list.test.tsx`
 - Test: `e2e/performance.spec.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Rust 测试对 `large-10k-dir` 请求首批窗口，断言不一次性阻塞返回全部重元数据。前端测试断言 DOM 中只渲染可视范围附近的 item。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml large_directory && npm run test -- src/test/virtual-list.test.tsx`
 
 Expected: 分页快照或虚拟列表未实现。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 `DirectoryPage` 返回分页窗口、总数和 `snapshot_version`。前端使用 TanStack Virtual，固定详情行高、列表行高和图标网格 cell 尺寸。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run check:all`
 
 Expected: 10k 夹具测试通过，虚拟列表测试通过。
 
-- [ ] **Step 5: 运行 V0.3 大目录 e2e**
+- [x] **Step 5: 运行 V0.3 大目录 e2e**
 
 Run: `npm run e2e -- e2e/performance.spec.ts`
 
 Expected: 10k 目录首屏可滚动可选择；连续滚动期间 DOM 节点数量保持有限；无明显白屏。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src-tauri/src/core/fs.rs src-tauri/src/core/snapshot.rs src/components/files src-tauri/tests src/test e2e

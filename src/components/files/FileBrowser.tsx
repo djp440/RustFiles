@@ -152,7 +152,7 @@ function FileBrowser({
           ))}
         </div>
       </div>
-      <div style={{ overflow: 'auto', minHeight: 0 }}>
+      <div style={{ minHeight: 0, height: '100%' }}>
         {renderView()}
       </div>
     </GlassSurface>

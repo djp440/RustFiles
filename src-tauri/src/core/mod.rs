@@ -4,5 +4,6 @@ pub mod observability;
 pub mod path_safety;
 pub mod runtime;
 pub mod settings;
+pub mod snapshot;
 pub mod system;
 pub mod types;

@@ -18,6 +18,8 @@ export interface DirectoryPage {
   filterKind: 'all' | 'folders' | 'files' | 'images' | 'documents' | 'videos';
   showHidden: boolean;
   snapshotVersion: number;
+  offset: number;
+  limit: number;
 }
 
 export interface ListDirectoryOptions {
@@ -25,6 +27,8 @@ export interface ListDirectoryOptions {
   sortAscending?: boolean;
   filterKind?: DirectoryPage['filterKind'];
   showHidden?: boolean;
+  offset?: number;
+  limit?: number;
 }
 
 export interface SidebarRoots {
@@ -112,6 +116,8 @@ function toCamelDirectoryPage(page: {
   showHidden?: boolean;
   snapshot_version?: number;
   snapshotVersion?: number;
+  offset?: number;
+  limit?: number;
 }): DirectoryPage {
   return {
     path: page.path,
@@ -122,6 +128,8 @@ function toCamelDirectoryPage(page: {
     filterKind: page.filterKind ?? page.filter_kind ?? 'all',
     showHidden: page.showHidden ?? page.show_hidden ?? false,
     snapshotVersion: page.snapshotVersion ?? page.snapshot_version ?? 0,
+    offset: page.offset ?? 0,
+    limit: page.limit ?? Number.MAX_SAFE_INTEGER,
   };
 }
 
@@ -170,6 +178,8 @@ export async function listDirectory(path: string, options: ListDirectoryOptions 
       sortAscending: options.sortAscending,
       filterKind: options.filterKind,
       showHidden: options.showHidden,
+      offset: options.offset,
+      limit: options.limit,
     });
   }
 
@@ -183,9 +193,16 @@ export async function listDirectory(path: string, options: ListDirectoryOptions 
       filter_kind: DirectoryPage['filterKind'];
       show_hidden: boolean;
       snapshot_version: number;
+      offset: number;
+      limit: number;
     }>('list_directory', {
       path,
-      ...options,
+      sortKey: options.sortKey,
+      sortAscending: options.sortAscending,
+      filterKind: options.filterKind,
+      showHidden: options.showHidden,
+      offset: options.offset,
+      limit: options.limit,
     });
 
     return toCamelDirectoryPage(page);

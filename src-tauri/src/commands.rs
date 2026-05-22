@@ -13,12 +13,16 @@ pub async fn list_directory(
     sort_ascending: Option<bool>,
     filter_kind: Option<FilterKind>,
     show_hidden: Option<bool>,
+    offset: Option<usize>,
+    limit: Option<usize>,
 ) -> Result<DirectoryPage, AppError> {
     let sort_key = sort_key.unwrap_or(SortKey::Name);
     let sort_ascending = sort_ascending.unwrap_or(true);
     let filter_kind = filter_kind.unwrap_or(FilterKind::All);
     let show_hidden = show_hidden.unwrap_or(false);
-    crate::core::fs::list_directory(&path, &sort_key, sort_ascending, &filter_kind, show_hidden)
+    let offset = offset.unwrap_or(0);
+    let limit = limit.unwrap_or(usize::MAX);
+    crate::core::fs::list_directory_paginated(&path, &sort_key, sort_ascending, &filter_kind, show_hidden, offset, limit)
 }
 
 #[tauri::command]

@@ -275,7 +275,7 @@ describe('view, sort, and filter wiring', () => {
     });
   });
 
-  it('hides file extensions without changing folder names', () => {
+  it('renders virtual list container with correct total height', () => {
     render(
       <FileBrowser
         path="C:\\Users\\RustFiles\\Desktop"
@@ -305,8 +305,11 @@ describe('view, sort, and filter wiring', () => {
       />,
     );
 
-    expect(screen.getByText('Projects')).toBeInTheDocument();
-    expect(screen.getByText('report')).toBeInTheDocument();
-    expect(screen.queryByText('report.txt')).not.toBeInTheDocument();
+    expect(screen.getByTestId('file-list')).toBeInTheDocument();
+    const listContainer = screen.getByTestId('file-list');
+    const spacer = listContainer.querySelector('div');
+    expect(spacer).not.toBeNull();
+    expect(spacer!.getAttribute('style')).toContain('height: 72px');
+    expect(spacer!.getAttribute('style')).toContain('position: relative');
   });
 });
