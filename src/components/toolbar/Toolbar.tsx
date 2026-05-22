@@ -1,4 +1,5 @@
 import type { DirectoryPage } from '../../api/tauri';
+import { useSearchStore } from '../../stores/search';
 
 interface ToolbarProps {
   sortKey: DirectoryPage['sortKey'];
@@ -25,6 +26,27 @@ function Toolbar({
   onShowHiddenFilesChange,
   onShowFileExtensionsChange,
 }: ToolbarProps) {
+  const search = useSearchStore();
+  const searchStatusLabel =
+    search.status === 'idle'
+      ? 'Idle'
+      : search.status === 'queued'
+        ? 'Queued'
+        : search.status === 'running'
+          ? 'Searching'
+          : search.status === 'cancelling'
+            ? 'Cancelling'
+            : search.status === 'cancelled'
+              ? 'Cancelled'
+              : search.status === 'completed'
+                ? 'Complete'
+                : search.status === 'failed'
+                  ? 'Failed'
+                  : search.status === 'partially_completed'
+                    ? 'Partial'
+                    : 'Search';
+  const showCancelButton = search.recursive && (search.status === 'queued' || search.status === 'running' || search.status === 'cancelling');
+
   return (
     <section
       aria-label="Toolbar"
@@ -37,6 +59,46 @@ function Toolbar({
         alignItems: 'center',
       }}
     >
+      <div style={{ display: 'grid', gap: 4, minWidth: 240, flex: '1 1 280px' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <label style={{ display: 'grid', gap: 4, flex: '1 1 auto' }}>
+            <span style={{ fontSize: 12 }}>Search</span>
+            <input
+              aria-label="Search files"
+              value={search.query}
+              onChange={(event) => search.setQuery(event.target.value)}
+              placeholder="Search current folder"
+            />
+          </label>
+          <button
+            type="button"
+            aria-label="Clear search"
+            disabled={search.query.trim() === ''}
+            onClick={() => search.clearSearch()}
+          >
+            Clear
+          </button>
+          {showCancelButton ? (
+            <button
+              type="button"
+              aria-label="Cancel search"
+              onClick={() => void search.cancelSearch()}
+            >
+              Cancel
+            </button>
+          ) : null}
+        </div>
+        <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+          <input
+            aria-label="Recursive search"
+            type="checkbox"
+            checked={search.recursive}
+            onChange={(event) => search.setRecursive(event.target.checked)}
+          />
+          <span>Recursive search</span>
+          <span style={{ fontSize: 12, opacity: 0.7 }}>· {searchStatusLabel}</span>
+        </label>
+      </div>
       <label style={{ display: 'grid', gap: 4 }}>
         <span style={{ fontSize: 12 }}>Sort key</span>
         <select aria-label="Sort key" value={sortKey} onChange={(event) => onSortKeyChange(event.target.value as DirectoryPage['sortKey'])}>

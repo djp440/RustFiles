@@ -1,9 +1,12 @@
 use crate::core::error::AppError;
+use crate::core::search::{SearchRequest, TaskId};
 use crate::core::runtime::RuntimeGuard;
 use crate::core::scheduler::{
     summarize_interaction_state, summarize_viewport_state, SchedulerReportAck, SchedulerSignal,
 };
-use crate::core::types::{DirectoryPage, DriveList, FilterKind, Settings, SidebarRoots, SortKey};
+use crate::core::types::{
+    DirectoryPage, DriveList, FilterKind, Settings, SidebarRoots, SortKey, TaskStatus,
+};
 
 // ============================================================
 // 浏览类 commands — 非危险
@@ -43,13 +46,13 @@ pub async fn get_drives() -> Result<DriveList, AppError> {
 // ============================================================
 
 #[tauri::command]
-pub async fn start_search() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn start_search(request: SearchRequest) -> Result<TaskId, AppError> {
+    crate::core::search::start_search(request)
 }
 
 #[tauri::command]
-pub async fn cancel_task() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn cancel_task(task_id: TaskId) -> Result<TaskStatus, AppError> {
+    crate::core::search::cancel_task(&task_id)
 }
 
 // ============================================================

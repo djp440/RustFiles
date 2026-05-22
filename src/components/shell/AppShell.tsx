@@ -27,6 +27,7 @@ import {
   setTabLoading,
   submitTabPath,
 } from '../../stores/tabs';
+import { searchStore } from '../../stores/search';
 import { loadSettings, saveSettings, settingsStore } from '../../stores/settings';
 import { useInteractionReporting } from '../../hooks/useInteractionReporting';
 
@@ -52,6 +53,7 @@ function AppShell() {
   const [settingsState, setSettingsState] = useState(() => settingsStore.getState());
   const [filterKind, setFilterKind] = useState<DirectoryPage['filterKind']>('all');
   const [settingsReady, setSettingsReady] = useState(false);
+  const [currentSnapshotVersion, setCurrentSnapshotVersion] = useState<number | null>(null);
   const { interactionEpoch, lastInputAtMs, reportInteraction } = useInteractionReporting({
     activeTabId: tab.id,
   });
@@ -102,12 +104,14 @@ function AppShell() {
     };
   }, []);
 
-  useEffect(() => {
+  async function loadDirectory(path: string) {
     if (!settingsReady) {
       return;
     }
 
-    if (!isFilesystemPath(tab.path)) {
+    setCurrentSnapshotVersion(null);
+
+    if (!isFilesystemPath(path)) {
       setTab((currentTab) => ({
         ...currentTab,
         entries: [],
@@ -117,31 +121,40 @@ function AppShell() {
       return;
     }
 
-    let cancelled = false;
     setTab((currentTab) => setTabLoading(currentTab, true));
 
-    void listDirectory(tab.path, {
-      sortKey: settingsState.settings.sortKey,
-      sortAscending: settingsState.settings.sortAscending,
-      filterKind,
-      showHidden: settingsState.settings.showHiddenFiles,
-    })
-      .then((page) => {
-        if (!cancelled) {
-          setTab((currentTab) => applyDirectoryPage(currentTab, page));
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          const message = error instanceof Error ? error.message : 'Failed to load directory.';
-          setTab((currentTab) => setTabError(currentTab, message));
-        }
+    try {
+      const page = await listDirectory(path, {
+        sortKey: settingsState.settings.sortKey,
+        sortAscending: settingsState.settings.sortAscending,
+        filterKind,
+        showHidden: settingsState.settings.showHiddenFiles,
       });
+      setCurrentSnapshotVersion(page.snapshotVersion);
+      setTab((currentTab) => applyDirectoryPage(currentTab, page));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to load directory.';
+      setTab((currentTab) => setTabError(currentTab, message));
+    }
+  }
 
-      return () => {
-        cancelled = true;
-      };
+  useEffect(() => {
+    if (!settingsReady) {
+      return undefined;
+    }
+
+    void loadDirectory(tab.path);
+    return undefined;
   }, [filterKind, settingsReady, settingsState.settings.showHiddenFiles, settingsState.settings.sortAscending, settingsState.settings.sortKey, tab.path]);
+
+  useEffect(() => {
+    searchStore.setContext({
+      currentPath: tab.path,
+      currentSnapshotVersion,
+      currentEntries: tab.entries,
+      isTauriRuntime,
+    });
+  }, [currentSnapshotVersion, isTauriRuntime, tab.entries, tab.path]);
 
   function handleSortKeyChange(sortKey: DirectoryPage['sortKey']) {
     void saveSettings({
@@ -198,6 +211,20 @@ function AppShell() {
 
   function handleOpenEntry(entry: Parameters<typeof navigateTabToEntry>[1]) {
     setTab((currentTab) => navigateTabToEntry(currentTab, entry));
+  }
+
+  async function handleOpenSearchResultLocation(item: Parameters<typeof searchStore.openSearchResultLocation>[0]) {
+    await searchStore.openSearchResultLocation(item, {
+      currentPath: tab.path,
+      currentSnapshotVersion,
+      navigateToPath: async (nextPath) => {
+        void reportInteraction();
+        setTab((currentTab) => submitTabPath(currentTab, nextPath));
+      },
+      refreshCurrentDirectory: async () => {
+        await loadDirectory(tab.path);
+      },
+    });
   }
 
   return (
@@ -257,6 +284,7 @@ function AppShell() {
           showHiddenFiles={settingsState.settings.showHiddenFiles}
           showFileExtensions={settingsState.settings.showFileExtensions}
           onOpenEntry={handleOpenEntry}
+          onOpenSearchResultLocation={handleOpenSearchResultLocation}
           onUserInteraction={() => void reportInteraction()}
         />
       </div>

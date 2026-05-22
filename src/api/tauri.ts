@@ -125,6 +125,53 @@ export interface Settings {
   sortAscending: boolean;
 }
 
+export type TaskStatus =
+  | 'queued'
+  | 'validating'
+  | 'running'
+  | 'waiting_for_conflict_decision'
+  | 'cancelling'
+  | 'cancelled'
+  | 'completed'
+  | 'failed'
+  | 'partially_completed';
+
+export interface AppError {
+  code: string;
+  message: string;
+  retryable: boolean;
+  refresh_suggestion: string | null;
+}
+
+export interface SearchRequest {
+  root_path: string;
+  query: string;
+  recursive: boolean;
+  snapshot_version: number | null;
+}
+
+export interface SearchErrorSummary {
+  path: string;
+  error: AppError;
+}
+
+export interface SearchResultBatch {
+  task_id: string;
+  root_path: string;
+  query: string;
+  recursive: boolean;
+  snapshot_version: number | null;
+  matches: DirectoryEntry[];
+  error_summaries: SearchErrorSummary[];
+}
+
+export interface SearchTaskSnapshot {
+  task_id: string;
+  request: SearchRequest;
+  status: TaskStatus;
+  batches: SearchResultBatch[];
+}
+
 interface RawSettings {
   schema_version?: number;
   show_hidden_files?: boolean;
@@ -163,6 +210,52 @@ const FALLBACK_SETTINGS: Settings = {
   sortKey: 'name',
   sortAscending: true,
 };
+
+const PREVIEW_DIRECTORY_MAP: Record<string, Array<{ path: string; name: string; isFolder: boolean }>> = {
+  'C:\\Users\\demo': [
+    { path: 'C:\\Users\\demo\\Projects', name: 'Projects', isFolder: true },
+    { path: 'C:\\Users\\demo\\Documents', name: 'Documents', isFolder: true },
+    { path: 'C:\\Users\\demo\\Archive', name: 'Archive', isFolder: true },
+    { path: 'C:\\Users\\demo\\report-root.txt', name: 'report-root.txt', isFolder: false },
+    { path: 'C:\\Users\\demo\\notes.txt', name: 'notes.txt', isFolder: false },
+  ],
+  'C:\\Users\\demo\\Projects': [
+    { path: 'C:\\Users\\demo\\Projects\\RustFiles', name: 'RustFiles', isFolder: true },
+    { path: 'C:\\Users\\demo\\Projects\\Legacy', name: 'Legacy', isFolder: true },
+    { path: 'C:\\Users\\demo\\Projects\\report-project.txt', name: 'report-project.txt', isFolder: false },
+  ],
+  'C:\\Users\\demo\\Projects\\RustFiles': [
+    { path: 'C:\\Users\\demo\\Projects\\RustFiles\\src', name: 'src', isFolder: true },
+    { path: 'C:\\Users\\demo\\Projects\\RustFiles\\docs', name: 'docs', isFolder: true },
+    { path: 'C:\\Users\\demo\\Projects\\RustFiles\\search-notes.txt', name: 'search-notes.txt', isFolder: false },
+    { path: 'C:\\Users\\demo\\Projects\\RustFiles\\report-plan.md', name: 'report-plan.md', isFolder: false },
+  ],
+  'C:\\Users\\demo\\Projects\\RustFiles\\src': [
+    { path: 'C:\\Users\\demo\\Projects\\RustFiles\\src\\search.ts', name: 'search.ts', isFolder: false },
+    { path: 'C:\\Users\\demo\\Projects\\RustFiles\\src\\search-store.ts', name: 'search-store.ts', isFolder: false },
+    { path: 'C:\\Users\\demo\\Projects\\RustFiles\\src\\deep', name: 'deep', isFolder: true },
+  ],
+  'C:\\Users\\demo\\Projects\\RustFiles\\src\\deep': [
+    { path: 'C:\\Users\\demo\\Projects\\RustFiles\\src\\deep\\nested-report.txt', name: 'nested-report.txt', isFolder: false },
+    { path: 'C:\\Users\\demo\\Projects\\RustFiles\\src\\deep\\cancel-token.txt', name: 'cancel-token.txt', isFolder: false },
+  ],
+  'C:\\Users\\demo\\Projects\\RustFiles\\docs': [
+    { path: 'C:\\Users\\demo\\Projects\\RustFiles\\docs\\search-spec.md', name: 'search-spec.md', isFolder: false },
+    { path: 'C:\\Users\\demo\\Projects\\RustFiles\\docs\\recursion-notes.md', name: 'recursion-notes.md', isFolder: false },
+  ],
+  'C:\\Users\\demo\\Documents': [
+    { path: 'C:\\Users\\demo\\Documents\\report-draft.txt', name: 'report-draft.txt', isFolder: false },
+    { path: 'C:\\Users\\demo\\Documents\\todo.txt', name: 'todo.txt', isFolder: false },
+  ],
+  'C:\\Users\\demo\\Archive': [
+    { path: 'C:\\Users\\demo\\Archive\\archived-report.txt', name: 'archived-report.txt', isFolder: false },
+  ],
+  'C:\\Users\\demo\\Projects\\Legacy': [
+    { path: 'C:\\Users\\demo\\Projects\\Legacy\\legacy-report.txt', name: 'legacy-report.txt', isFolder: false },
+  ],
+};
+
+let previewSnapshotVersion = 0;
 
 const SCHEDULER_PRIORITY_ORDER: WorkKind[] = [
   'foreground_directory_enumeration',
@@ -425,15 +518,44 @@ schedulerReportingTarget.__RUSTFILES_REPORT_INTERACTION_STATE__ = reportInteract
 
 export async function listDirectory(path: string, options: ListDirectoryOptions = {}): Promise<DirectoryPage> {
   if (!hasTauriRuntime()) {
+    const normalizedPath = path.trim();
+    if (!isFilesystemPath(normalizedPath)) {
+      return toCamelDirectoryPage({
+        path,
+        entries: [],
+        sortKey: options.sortKey,
+        sortAscending: options.sortAscending,
+        filterKind: options.filterKind,
+        showHidden: options.showHidden,
+        offset: options.offset,
+        limit: options.limit,
+        snapshotVersion: 0,
+      });
+    }
+
+    previewSnapshotVersion += 1;
+
+    const rawEntries =
+      PREVIEW_DIRECTORY_MAP[normalizedPath] ??
+      buildPreviewDirectoryEntries(normalizedPath);
+
     return toCamelDirectoryPage({
       path,
-      entries: [],
+      entries: rawEntries.map((entry, index) => ({
+        path: entry.path,
+        name: entry.name,
+        size: entry.isFolder ? 0 : 1024 + index,
+        modified: 1_700_000_000 + index,
+        isHidden: false,
+        isFolder: entry.isFolder,
+      })),
       sortKey: options.sortKey,
       sortAscending: options.sortAscending,
       filterKind: options.filterKind,
       showHidden: options.showHidden,
       offset: options.offset,
       limit: options.limit,
+      snapshotVersion: previewSnapshotVersion,
     });
   }
 
@@ -466,6 +588,44 @@ export async function listDirectory(path: string, options: ListDirectoryOptions 
       entries: [],
     });
   }
+}
+
+export async function startSearch(request: SearchRequest): Promise<string> {
+  if (!hasTauriRuntime()) {
+    return `preview-search-${Date.now()}`;
+  }
+
+  return await invoke<string>('start_search', {
+    request,
+  });
+}
+
+export async function cancelTask(taskId: string): Promise<TaskStatus> {
+  if (!hasTauriRuntime()) {
+    return 'cancelled';
+  }
+
+  return await invoke<TaskStatus>('cancel_task', {
+    taskId,
+  });
+}
+
+function isFilesystemPath(path: string): boolean {
+  return /^[A-Za-z]:\\/.test(path) || path.startsWith('\\\\');
+}
+
+function buildPreviewDirectoryEntries(path: string): Array<{ path: string; name: string; isFolder: boolean }> {
+  const pathParts = path.split('\\').filter(Boolean);
+  const leaf = pathParts.length > 0 ? pathParts[pathParts.length - 1] : 'Preview';
+  const folderStem = leaf === ':' ? 'Drive' : leaf.replace(/[:]/g, '');
+
+  return [
+    { path: `${path}\\${folderStem}-alpha`, name: `${folderStem}-alpha`, isFolder: true },
+    { path: `${path}\\${folderStem}-beta`, name: `${folderStem}-beta`, isFolder: true },
+    { path: `${path}\\report-${folderStem}.txt`, name: `report-${folderStem}.txt`, isFolder: false },
+    { path: `${path}\\search-${folderStem}.txt`, name: `search-${folderStem}.txt`, isFolder: false },
+    { path: `${path}\\notes-${folderStem}.txt`, name: `notes-${folderStem}.txt`, isFolder: false },
+  ];
 }
 
 export async function getSidebarRoots(): Promise<SidebarRoots> {
