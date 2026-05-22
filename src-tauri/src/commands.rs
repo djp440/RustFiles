@@ -1,23 +1,34 @@
 use crate::core::error::AppError;
 use crate::core::runtime::RuntimeGuard;
+use crate::core::types::{DirectoryPage, DriveList, FilterKind, SidebarRoots, SortKey};
 
 // ============================================================
-// 浏览类 commands — 非危险，直接返回 not_implemented
+// 浏览类 commands — 非危险
 // ============================================================
 
 #[tauri::command]
-pub async fn list_directory() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn list_directory(
+    path: String,
+    sort_key: Option<SortKey>,
+    sort_ascending: Option<bool>,
+    filter_kind: Option<FilterKind>,
+    show_hidden: Option<bool>,
+) -> Result<DirectoryPage, AppError> {
+    let sort_key = sort_key.unwrap_or(SortKey::Name);
+    let sort_ascending = sort_ascending.unwrap_or(true);
+    let filter_kind = filter_kind.unwrap_or(FilterKind::All);
+    let show_hidden = show_hidden.unwrap_or(false);
+    crate::core::fs::list_directory(&path, &sort_key, sort_ascending, &filter_kind, show_hidden)
 }
 
 #[tauri::command]
-pub async fn get_sidebar_roots() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn get_sidebar_roots() -> Result<SidebarRoots, AppError> {
+    crate::core::system::get_sidebar_roots()
 }
 
 #[tauri::command]
-pub async fn get_drives() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn get_drives() -> Result<DriveList, AppError> {
+    crate::core::system::get_drives()
 }
 
 // ============================================================

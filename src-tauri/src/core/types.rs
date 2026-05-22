@@ -88,3 +88,27 @@ pub enum ConflictDecision {
     KeepBoth,
     ApplyToAll,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct DriveInfo {
+    pub name: String,
+    pub path: String,
+    pub available_space: u64,
+    pub total_space: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct DriveList {
+    pub drives: Vec<DriveInfo>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SidebarRoots {
+    pub desktop: String,
+    pub downloads: String,
+    pub documents: String,
+    pub pictures: String,
+    pub videos: String,
+    pub music: String,
+    pub this_pc: String,
+}

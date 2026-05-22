@@ -1,7 +1,9 @@
+import AppShell from './components/shell/AppShell';
+
 function App() {
   return (
     <div role="application" aria-label="RustFiles">
-      <h1>RustFiles</h1>
+      <AppShell />
     </div>
   );
 }
