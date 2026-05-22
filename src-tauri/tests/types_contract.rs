@@ -1,4 +1,4 @@
-use rustfiles::core::types::{TaskStatus, Settings};
+use rustfiles::core::types::{Settings, SortKey, TaskStatus};
 
 #[test]
 fn task_status_contains_all_required_states() {
@@ -34,12 +34,51 @@ fn task_status_contains_all_required_states() {
 }
 
 #[test]
-fn settings_contains_schema_version() {
+fn settings_contains_required_fields() {
     let settings = Settings {
         schema_version: 1,
+        show_hidden_files: false,
+        show_file_extensions: true,
+        sort_key: SortKey::Name,
+        sort_ascending: true,
     };
     assert_eq!(settings.schema_version, 1);
+    assert!(!settings.show_hidden_files);
+    assert!(settings.show_file_extensions);
+    assert_eq!(settings.sort_key, SortKey::Name);
+    assert!(settings.sort_ascending);
+}
+
+#[test]
+fn settings_serialize_roundtrip() {
+    let settings = Settings {
+        schema_version: 1,
+        show_hidden_files: true,
+        show_file_extensions: false,
+        sort_key: SortKey::Size,
+        sort_ascending: false,
+    };
     let serialized = serde_json::to_string(&settings).unwrap();
     let deserialized: Settings = serde_json::from_str(&serialized).unwrap();
     assert_eq!(deserialized.schema_version, 1);
+    assert!(deserialized.show_hidden_files);
+    assert!(!deserialized.show_file_extensions);
+    assert_eq!(deserialized.sort_key, SortKey::Size);
+    assert!(!deserialized.sort_ascending);
+}
+
+#[test]
+fn settings_serialized_keys_use_snake_case() {
+    let settings = Settings {
+        schema_version: 1,
+        show_hidden_files: false,
+        show_file_extensions: true,
+        sort_key: SortKey::Name,
+        sort_ascending: true,
+    };
+    let serialized = serde_json::to_string(&settings).unwrap();
+    assert!(serialized.contains("show_hidden_files"), "expected snake_case key");
+    assert!(serialized.contains("show_file_extensions"), "expected snake_case key");
+    assert!(serialized.contains("sort_key"), "expected snake_case key");
+    assert!(serialized.contains("sort_ascending"), "expected snake_case key");
 }

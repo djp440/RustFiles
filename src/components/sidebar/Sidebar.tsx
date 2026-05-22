@@ -3,6 +3,7 @@ import type { DriveInfo, SidebarRoots as SidebarRootsData } from '../../api/taur
 interface SidebarProps {
   roots: SidebarRootsData;
   drives: DriveInfo[];
+  isTauriRuntime: boolean;
   activePath: string;
   onSelectPath: (path: string) => void;
 }
@@ -17,7 +18,7 @@ const rootLabels: Array<{ key: keyof SidebarRootsData; label: string }> = [
   { key: 'music', label: 'Music' },
 ];
 
-function Sidebar({ roots, drives, activePath, onSelectPath }: SidebarProps) {
+function Sidebar({ roots, drives, isTauriRuntime, activePath, onSelectPath }: SidebarProps) {
   return (
     <aside
       aria-label="Sidebar"
@@ -64,8 +65,12 @@ function Sidebar({ roots, drives, activePath, onSelectPath }: SidebarProps) {
                 {drive.name || drive.path}
               </button>
             ))
-          ) : (
+          ) : isTauriRuntime ? (
             <span style={{ fontSize: 12, opacity: 0.7 }}>No drives available</span>
+          ) : (
+            <span style={{ fontSize: 12, opacity: 0.7 }}>
+              Browser preview mode: desktop runtime features are limited.
+            </span>
           )}
         </div>
       </section>

@@ -116,6 +116,20 @@ pub fn list_directory(
                     continue;
                 }
             }
+            FilterKind::Videos => {
+                if is_folder {
+                    continue;
+                }
+                let lower = name.to_lowercase();
+                if !lower.ends_with(".mp4")
+                    && !lower.ends_with(".mov")
+                    && !lower.ends_with(".avi")
+                    && !lower.ends_with(".mkv")
+                    && !lower.ends_with(".wmv")
+                {
+                    continue;
+                }
+            }
             FilterKind::All => {}
         }
 

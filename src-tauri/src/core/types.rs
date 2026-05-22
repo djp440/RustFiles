@@ -50,6 +50,10 @@ pub enum TaskStatus {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Settings {
     pub schema_version: u32,
+    pub show_hidden_files: bool,
+    pub show_file_extensions: bool,
+    pub sort_key: SortKey,
+    pub sort_ascending: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -78,6 +82,7 @@ pub enum FilterKind {
     Files,
     Images,
     Documents,
+    Videos,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

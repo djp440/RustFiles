@@ -1,6 +1,6 @@
 use crate::core::error::AppError;
 use crate::core::runtime::RuntimeGuard;
-use crate::core::types::{DirectoryPage, DriveList, FilterKind, SidebarRoots, SortKey};
+use crate::core::types::{DirectoryPage, DriveList, FilterKind, Settings, SidebarRoots, SortKey};
 
 // ============================================================
 // 浏览类 commands — 非危险
@@ -154,13 +154,14 @@ pub async fn report_interaction_state() -> Result<(), AppError> {
 // ============================================================
 
 #[tauri::command]
-pub async fn get_settings() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn get_settings() -> Result<Settings, AppError> {
+    crate::core::settings::read_settings()
 }
 
 #[tauri::command]
-pub async fn update_settings() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn update_settings(settings: Settings) -> Result<Settings, AppError> {
+    crate::core::settings::write_settings(&settings)?;
+    crate::core::settings::read_settings()
 }
 
 // ============================================================

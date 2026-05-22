@@ -23,6 +23,13 @@ test('navigation shell supports basic user navigation flow', async ({ page }) =>
   await expect(sidebar.getByRole('button', { name: 'Pictures' })).toBeVisible();
   await expect(sidebar.getByRole('button', { name: 'Videos' })).toBeVisible();
   await expect(sidebar.getByRole('button', { name: 'Music' })).toBeVisible();
+  await expect(
+    sidebar.getByText('Browser preview mode: desktop runtime features are limited.'),
+  ).toBeVisible();
+  await expect(sidebar.getByText('No drives available')).toHaveCount(0);
+  await expect(
+    page.getByText('This location is a preview entry. Browse real folders in the desktop app runtime.'),
+  ).toBeVisible();
 
   await pathInput.fill('C:\\Users');
   await pathInput.press('Enter');

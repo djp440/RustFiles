@@ -26,12 +26,31 @@ if ($process.HasExited) {
 taskkill /PID $process.Id /T /F | Out-Null
 Start-Sleep -Seconds 2
 
-$lingeringProcesses = Get-CimInstance Win32_Process | Where-Object {
+function Test-ProcessDescendantOf {
+    param([int]$TargetPid, [int]$AncestorPid)
+    $currentPid = $TargetPid
+    $visited = @{}
+    while ($currentPid -and $currentPid -ne 0 -and -not $visited.ContainsKey($currentPid)) {
+        if ($currentPid -eq $AncestorPid) { return $true }
+        $visited[$currentPid] = $true
+        $proc = Get-CimInstance Win32_Process -Filter "ProcessId = $currentPid" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $proc) { break }
+        $currentPid = $proc.ParentProcessId
+    }
+    return $false
+}
+
+$candidates = Get-CimInstance Win32_Process | Where-Object {
     $_.CommandLine -like '*RustFiles*' -and (
         $_.Name -eq 'rustfiles.exe' -or
         $_.Name -eq 'node.exe' -or
         $_.Name -eq 'npx.cmd'
     )
+}
+
+$lingeringProcesses = $candidates | Where-Object {
+    if ($_.Name -eq 'rustfiles.exe') { return $true }
+    return (Test-ProcessDescendantOf -TargetPid $_.ProcessId -AncestorPid $process.Id)
 }
 
 if ($lingeringProcesses) {

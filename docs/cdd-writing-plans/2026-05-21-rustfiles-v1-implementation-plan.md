@@ -126,7 +126,7 @@
 - 任何危险 command 缺少测试根 guard、确认令牌或人工审核记录时，不允许合入。
 - 单元测试、lint、typecheck 和 build 是必要条件；阶段完成必须包含真实运行层面的 e2e 证据。
 
-## Task 0.1: 建立工程脚手架与基础命令
+## Task 0.1: 建立工程脚手架与基础命令（已完成）
 
 **Files:**
 - Create: `package.json`
@@ -144,7 +144,7 @@
 - Create: `src-tauri/src/lib.rs`
 - Test: `src/test/app-smoke.test.tsx`
 
-- [ ] **Step 1: 写最小失败测试**
+- [x] **Step 1: 写最小失败测试**
 
 ```tsx
 // src/test/app-smoke.test.tsx
@@ -157,13 +157,13 @@ it("renders the RustFiles shell", () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm install && npm run test -- src/test/app-smoke.test.tsx`
 
 Expected: 测试失败，提示 `Unable to find role="application"` 或依赖脚本尚未存在。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 创建 React/Vite/Tauri 基础文件。`App.tsx` 暂时只渲染带 `role="application"` 和 `aria-label="RustFiles"` 的 App Shell 占位。`src-tauri/src/lib.rs` 注册空 Tauri builder，暂不注册危险 command。`package.json` 至少包含：
 
@@ -183,26 +183,26 @@ Expected: 测试失败，提示 `Unable to find role="application"` 或依赖脚
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run check:all`
 
 Expected: TypeScript、Vitest、Cargo test、Vite build 全部退出码为 0。
 
-- [ ] **Step 5: 运行最小桌面验证**
+- [x] **Step 5: 运行最小桌面验证**
 
 Run: `npm run tauri:dev:test`
 
 Expected: Tauri dev 窗口可启动，窗口中可见 RustFiles shell，占位 UI 无控制台错误。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add package.json index.html vite.config.ts tsconfig.json tsconfig.node.json playwright.config.ts src src-tauri
 git commit -m "chore: scaffold RustFiles Tauri app"
 ```
 
-## Task 0.2: 建立共享类型、错误模型与测试夹具工具
+## Task 0.2: 建立共享类型、错误模型与测试夹具工具（已完成）
 
 **Files:**
 - Create: `src-tauri/src/core/mod.rs`
@@ -214,21 +214,21 @@ git commit -m "chore: scaffold RustFiles Tauri app"
 - Test: `src-tauri/tests/types_contract.rs`
 - Test: `src-tauri/tests/fixture_generation.rs`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `types_contract.rs` 断言 `TaskStatus` 包含 `queued`、`validating`、`running`、`waiting_for_conflict_decision`、`cancelling`、`cancelled`、`completed`、`failed`、`partially_completed`，并能序列化为前端契约字符串。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml types_contract`
 
 Expected: 编译失败或缺少 `TaskStatus` 类型。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 实现 `AppError`、`ErrorCode`、`FileEntry`、`DirectoryPage`、`FileTask`、`TaskStatus`、`Settings`、`ViewMode`、`SortKey`、`FilterKind`、`ConflictDecision`。所有类型派生 `Serialize`、`Deserialize`、`Clone`、`Debug`；`Settings` 必须包含 `schema_version`。
 
-- [ ] **Step 4: 添加夹具生成脚本**
+- [x] **Step 4: 添加夹具生成脚本**
 
 `scripts/create-fixtures.ps1` 接收 `-Root <path>`，生成：
 
@@ -242,20 +242,20 @@ Expected: 编译失败或缺少 `TaskStatus` 类型。
 
 脚本必须拒绝空路径、用户 profile 根、桌面、下载、文档、图片、视频、音乐目录。
 
-- [ ] **Step 5: 运行验证**
+- [x] **Step 5: 运行验证**
 
 Run: `powershell -ExecutionPolicy Bypass -File scripts/create-fixtures.ps1 -Root .\.tmp\fixtures`
 
 Expected: 生成所有夹具目录；`large-10k-dir` 文件数为 10000；脚本对真实用户常用目录返回非 0。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src-tauri/src/core scripts src-tauri/tests
 git commit -m "chore: add core contracts and fixtures"
 ```
 
-## Task 0.3: 锁定 Tauri command 白名单和测试模式 guard 外壳
+## Task 0.3: 锁定 Tauri command 白名单和测试模式 guard 外壳（已完成）
 
 **Files:**
 - Modify: `src-tauri/capabilities/default.json`
@@ -264,79 +264,79 @@ git commit -m "chore: add core contracts and fixtures"
 - Create: `src-tauri/src/core/runtime.rs`
 - Test: `src-tauri/tests/command_whitelist.rs`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 测试读取 `src-tauri/capabilities/default.json`，断言只暴露架构文档列出的 command 名称；危险 command 名称必须在 `dangerous_commands` 测试集合中。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml command_whitelist`
 
 Expected: 缺少 capability 或命令集合不匹配。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 创建 command adapter 空实现，所有 command 返回 `not_implemented` 结构化错误。危险 command adapter 必须检查测试模式和确认字段，但此阶段不执行真实文件操作。
 
-- [ ] **Step 4: 运行验证**
+- [x] **Step 4: 运行验证**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml command_whitelist`
 
 Expected: 白名单匹配；危险 command 缺少确认字段时返回 `confirmation_required`。
 
-- [ ] **Step 5: 运行 e2e smoke**
+- [x] **Step 5: 运行 e2e smoke**
 
 Run: `npm run tauri:dev:test`
 
 Expected: 应用仍能启动，前端没有直接文件系统写权限相关配置。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src-tauri/capabilities/default.json src-tauri/src/lib.rs src-tauri/src/commands.rs src-tauri/src/core/runtime.rs src-tauri/tests
 git commit -m "chore: lock Tauri command boundary"
 ```
 
-## Task 1.1: 实现路径安全模块
+## Task 1.1: 实现路径安全模块（已完成）
 
 **Files:**
 - Create: `src-tauri/src/core/path_safety.rs`
 - Test: `src-tauri/tests/path_safety.rs`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 覆盖 Windows 保留名、非法字符、尾随空格/点、长路径、大小写冲突、symlink、junction、reparse point、UNC、subst/network 分类和测试根逃逸。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml path_safety`
 
 Expected: 编译失败或安全决策函数缺失。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 实现 `normalize_path`、`classify_path`、`validate_child_name`、`guard_destructive_path`、`guard_test_root_after_reparse_resolution`。破坏性递归操作默认不得跟随 reparse point 到目标树。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml path_safety`
 
 Expected: 所有路径安全用例通过；当前系统无法创建某类 reparse point 时，测试必须显式 `ignored` 并记录原因，不得假装通过。
 
-- [ ] **Step 5: 运行测试根逃逸 e2e**
+- [x] **Step 5: 运行测试根逃逸 e2e**
 
 Run: `powershell -ExecutionPolicy Bypass -File scripts/create-fixtures.ps1 -Root .\.tmp\fixtures; cargo test --manifest-path src-tauri/Cargo.toml test_root_escape_is_rejected -- --nocapture`
 
 Expected: 指向测试根外部的 symlink/junction destructive operation 返回 `test_root_escape`。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src-tauri/src/core/path_safety.rs src-tauri/tests/path_safety.rs
 git commit -m "feat: add Windows path safety guards"
 ```
 
-## Task 1.2: 实现只读目录枚举和侧边栏 roots
+## Task 1.2: 实现只读目录枚举和侧边栏 roots（已完成）
 
 **Files:**
 - Create: `src-tauri/src/core/fs.rs`
@@ -345,40 +345,40 @@ git commit -m "feat: add Windows path safety guards"
 - Test: `src-tauri/tests/fs_listing.rs`
 - Test: `src-tauri/tests/sidebar_roots.rs`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 测试 `list_directory` 对 `small-dir` 返回 `DirectoryPage`，包含路径、条目、总数、排序、过滤、隐藏文件设置、`snapshot_version`。测试 `get_sidebar_roots` 返回桌面、下载、文档、图片、视频、音乐、此电脑和磁盘分区。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml fs_listing sidebar_roots`
 
 Expected: command 或模块未实现。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 `fs` 只读枚举目录，不执行写操作。`system` 读取常用目录和磁盘分区，失败时返回结构化错误但不阻塞应用启动。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml fs_listing sidebar_roots`
 
 Expected: `small-dir` 枚举成功；无权限路径返回 `permission_denied`；不存在路径返回 `path_not_found`。
 
-- [ ] **Step 5: 运行 command 级验证**
+- [x] **Step 5: 运行 command 级验证**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml list_directory_command_returns_page -- --nocapture`
 
 Expected: command adapter 返回 JSON 可反序列化为 `DirectoryPage`。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src-tauri/src/core/fs.rs src-tauri/src/core/system.rs src-tauri/src/commands.rs src-tauri/tests
 git commit -m "feat: list local directories"
 ```
 
-## Task 1.3: 实现主界面浏览骨架
+## Task 1.3: 实现主界面浏览骨架（已完成）
 
 **Files:**
 - Create: `src/api/tauri.ts`
@@ -393,40 +393,92 @@ git commit -m "feat: list local directories"
 - Test: `src/test/navigation-state.test.ts`
 - Test: `e2e/navigation.spec.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `navigation-state.test.ts` 验证进入目录、返回、前进、路径输入和面包屑点击会更新当前 tab 的 path/history。`navigation.spec.ts` 打开应用后点击侧边栏夹具目录、双击子文件夹、点击返回。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm run test -- src/test/navigation-state.test.ts && npm run e2e -- e2e/navigation.spec.ts`
 
 Expected: 前端组件或 e2e 目标缺失。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 实现 App Shell、Sidebar、NavigationBar、Breadcrumb、FileBrowser。默认单标签，但 `tabs.ts` 必须使用 `TabState` 结构，为 V0.8 保留状态框架。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run test -- src/test/navigation-state.test.ts`
 
 Expected: tab 导航状态测试通过。
 
-- [ ] **Step 5: 运行 V0.1 e2e**
+- [x] **Step 5: 运行 V0.1 e2e**
 
 Run: `npm run tauri:dev:test`，另一个终端运行 `npm run e2e -- e2e/navigation.spec.ts`
 
 Expected: 用户可从默认目录进入夹具目录，路径栏、面包屑、返回/前进和文件列表同步；无布局跳动。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src e2e
 git commit -m "feat: add browsing shell"
 ```
 
-## Task 2.1: 实现排序、过滤、隐藏文件和扩展名显示设置
+## Task 1.4: 修稳验证链路与非 Tauri 降级浏览体验（已完成）
+
+**Files:**
+- Modify: `package.json`
+- Modify: `vite.config.ts`
+- Modify: `src/components/shell/AppShell.tsx`
+- Modify: `src/components/sidebar/Sidebar.tsx`
+- Modify: `src/components/files/FileBrowser.tsx`
+- Test: `src/test/runtime-fallback.test.tsx`
+- Test: `e2e/navigation.spec.ts`
+
+- [x] **Step 1: 写失败测试与回归断言**
+
+新增 `runtime-fallback.test.tsx`，覆盖纯浏览器环境下的 App Shell 降级行为：`This PC` 这类非文件系统路径不会触发误导性的“目录加载失败”语义；Drives 区域在没有 Tauri runtime 时显示明确的桌面运行时提示，而不是把“没有驱动器”当成真实系统状态；加载文案必须是可读的正常字符串，不能出现编码污染。同步补充 `navigation.spec.ts`，让现有导航 e2e 在浏览器预览模式下也断言关键降级提示存在。
+
+- [x] **Step 2: 运行回归，确认当前实现真实失败**
+
+Run: `npm run check:all`
+
+Expected: `vitest run` 误收 `e2e/navigation.spec.ts`，出现 “Playwright Test did not expect test() to be called here” 并导致聚合检查失败。
+
+Run: `npm run test -- src/test/runtime-fallback.test.tsx`
+
+Expected: 断言失败，暴露当前浏览器预览模式仍显示 `No drives available` 或存在 `Loading directory...` 文案编码异常。
+
+- [x] **Step 3: 写最小实现**
+
+在 `vite.config.ts` 中显式收窄 Vitest 的测试收集范围，只运行 `src/test/` 下的单元/组件测试，并排除 `e2e/**`，保证 `npm run check:all` 不再把 Playwright spec 当成 Vitest suite。`AppShell.tsx` 负责向 Sidebar/FileBrowser 传递当前是否运行在 Tauri runtime 的明确信号；`Sidebar.tsx` 在浏览器预览模式下显示“驱动器仅在桌面运行时加载”之类的明确提示；`FileBrowser.tsx` 修正编码污染的 loading 文案，并为 `This PC` 这类占位路径显示清晰的预览态空状态说明，而不是看起来像真实文件系统枚举结果。
+
+- [x] **Step 4: 运行验证，确认检查链路恢复**
+
+Run: `npm run check:all`
+
+Expected: TypeScript、Vitest、Cargo test、Vite build 全部退出码为 0，且 Vitest 不再执行 `e2e/navigation.spec.ts`。
+
+- [x] **Step 5: 运行阶段 e2e 与人工预览验收**
+
+Run: `npm run tauri:dev:test`
+
+Expected: Tauri smoke 继续通过，新增提示文案不会破坏桌面端启动。
+
+Run: `npm run dev -- --host 127.0.0.1 --port 1420`，另一个终端运行 `npm run e2e -- e2e/navigation.spec.ts`
+
+Expected: 浏览器导航 e2e 通过；纯浏览器预览模式下能看到明确的降级提示，Drives 区域不再误导性显示真实系统“无驱动器”，页面文案不存在 mojibake。
+
+- [x] **Step 6: Commit**
+
+```bash
+git add package.json vite.config.ts src/components/shell/AppShell.tsx src/components/sidebar/Sidebar.tsx src/components/files/FileBrowser.tsx src/test/runtime-fallback.test.tsx e2e/navigation.spec.ts
+git commit -m "fix: stabilize validation pipeline and browser fallback shell"
+```
+
+## Task 2.1: 实现排序、过滤、隐藏文件和扩展名显示设置（已完成）
 
 **Files:**
 - Modify: `src-tauri/src/core/fs.rs`
@@ -439,33 +491,33 @@ git commit -m "feat: add browsing shell"
 - Test: `src/test/settings-store.test.ts`
 - Test: `e2e/view-sort-filter.spec.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Rust 测试固定文件大小和 mtime 后，验证名称、修改时间、大小、类型排序；过滤文件、文件夹、图片、视频、文档；隐藏文件开关。前端测试验证设置必须等 Rust 确认后才显示持久化成功。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml sort_filter settings && npm run test -- src/test/settings-store.test.ts`
 
 Expected: 排序、过滤或 settings command 缺失。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 实现 `Settings` 原子写入、`schema_version`、轻量设置即时保存、失败回滚。`fs` 根据 `SortKey`、`FilterKind` 和 settings 应用排序过滤。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run check:all`
 
 Expected: Rust/TS 测试、类型检查、构建通过。
 
-- [ ] **Step 5: 运行 V0.2 e2e**
+- [x] **Step 5: 运行 V0.2 e2e**
 
 Run: `npm run e2e -- e2e/view-sort-filter.spec.ts`
 
 Expected: 三种排序和五类过滤可见生效；隐藏文件/扩展名设置保存后刷新仍生效。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src-tauri/src/core/fs.rs src-tauri/src/core/settings.rs src-tauri/src/commands.rs src src-tauri/tests e2e
@@ -1209,7 +1261,7 @@ git commit -m "chore: prepare V1 desktop release"
 ## 推荐执行顺序
 
 1. V0.0：Task 0.1 -> 0.2 -> 0.3，先建立工程、类型、错误、夹具和 command 边界。
-2. V0.1：Task 1.1 -> 1.2 -> 1.3，先路径安全，再只读浏览，再前端浏览骨架。
+2. V0.1：Task 1.1 -> 1.2 -> 1.3 -> 1.4，先路径安全，再只读浏览，再前端浏览骨架，最后修稳检查链路与浏览器降级体验后再进入文件列表交互。
 3. V0.2：Task 2.1 -> 2.2，先数据行为，再视觉视图。
 4. V0.3：Task 3.1 -> 3.2，先虚拟列表和分页，再 UI 优先调度。
 5. V0.4：Task 4.1，搜索单独成版。
