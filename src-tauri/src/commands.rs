@@ -1,5 +1,8 @@
 use crate::core::error::AppError;
 use crate::core::runtime::RuntimeGuard;
+use crate::core::scheduler::{
+    summarize_interaction_state, summarize_viewport_state, SchedulerReportAck, SchedulerSignal,
+};
 use crate::core::types::{DirectoryPage, DriveList, FilterKind, Settings, SidebarRoots, SortKey};
 
 // ============================================================
@@ -144,13 +147,13 @@ pub async fn cancel_thumbnail_requests() -> Result<(), AppError> {
 // ============================================================
 
 #[tauri::command]
-pub async fn report_viewport_state() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn report_viewport_state(signal: SchedulerSignal) -> Result<SchedulerReportAck, AppError> {
+    Ok(summarize_viewport_state(signal))
 }
 
 #[tauri::command]
-pub async fn report_interaction_state() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn report_interaction_state(signal: SchedulerSignal) -> Result<SchedulerReportAck, AppError> {
+    Ok(summarize_interaction_state(signal))
 }
 
 // ============================================================

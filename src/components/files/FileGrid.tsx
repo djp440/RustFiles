@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { DirectoryEntry } from '../../api/tauri';
+import { useViewportReporting } from '../../hooks/useViewportReporting';
 
 const CELL_WIDTH = 120;
 const CELL_HEIGHT = 132;
@@ -13,6 +14,9 @@ interface FileGridProps {
   showFileExtensions: boolean;
   onToggleSelect: (path: string) => void;
   onOpenEntry: (entry: DirectoryEntry) => void;
+  activeTabId?: string;
+  interactionEpoch?: number;
+  lastInputAtMs?: number | null;
 }
 
 function FileGrid({
@@ -21,9 +25,18 @@ function FileGrid({
   showFileExtensions,
   onToggleSelect,
   onOpenEntry,
+  activeTabId = 'tab-1',
+  interactionEpoch = 0,
+  lastInputAtMs = null,
 }: FileGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(400);
+  const { handleScroll, setVisibleRange } = useViewportReporting({
+    activeTabId,
+    interactionEpoch,
+    lastInputAtMs,
+    visibleRange: null,
+  });
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -46,6 +59,51 @@ function FileGrid({
     estimateSize: () => CELL_HEIGHT,
     overscan: 3,
   });
+  const virtualRows = virtualizer.getVirtualItems();
+  const fallbackStartRow = Math.floor((scrollRef.current?.scrollTop ?? 0) / CELL_HEIGHT);
+  const fallbackVisibleRowCount = Math.max(1, Math.ceil((scrollRef.current?.clientHeight ?? 0) / CELL_HEIGHT));
+  const visibleRange =
+    virtualRows.length > 0
+      ? {
+          start_index: virtualRows[0].index * columns,
+          end_index: Math.min((virtualRows[virtualRows.length - 1].index + 1) * columns - 1, entries.length - 1),
+        }
+      : entries.length > 0
+        ? {
+            start_index: Math.min(Math.max(0, fallbackStartRow * columns), entries.length - 1),
+            end_index: Math.min(entries.length - 1, Math.max(0, (fallbackStartRow + fallbackVisibleRowCount) * columns - 1)),
+          }
+        : null;
+  const previousVisibleRangeRef = useRef<typeof visibleRange>(null);
+  const renderedRows =
+    virtualRows.length > 0
+      ? virtualRows
+      : visibleRange
+        ? Array.from(
+            { length: Math.max(1, Math.ceil((visibleRange.end_index - visibleRange.start_index + 1) / columns)) },
+            (_, offset) => {
+              const index = Math.floor(visibleRange.start_index / columns) + offset;
+              return {
+                key: `fallback-${index}`,
+                index,
+                start: index * CELL_HEIGHT,
+              };
+            },
+          )
+        : [];
+
+  useEffect(() => {
+    const previousVisibleRange = previousVisibleRangeRef.current;
+    if (
+      previousVisibleRange?.start_index === visibleRange?.start_index &&
+      previousVisibleRange?.end_index === visibleRange?.end_index
+    ) {
+      return;
+    }
+
+    previousVisibleRangeRef.current = visibleRange;
+    setVisibleRange(visibleRange);
+  }, [setVisibleRange, visibleRange]);
 
   return (
     <div
@@ -53,6 +111,7 @@ function FileGrid({
       data-testid="file-grid"
       aria-label="Icon grid view"
       role="list"
+      onScroll={handleScroll}
       style={{
         overflow: 'auto',
         height: '100%',
@@ -66,7 +125,7 @@ function FileGrid({
           boxSizing: 'border-box',
         }}
       >
-        {virtualizer.getVirtualItems().map((virtualRow) => {
+        {renderedRows.map((virtualRow) => {
           const rowStart = virtualRow.index * columns;
           const rowEnd = Math.min(rowStart + columns, entries.length);
           const rowEntries: DirectoryEntry[] = [];

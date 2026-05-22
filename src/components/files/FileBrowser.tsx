@@ -4,11 +4,15 @@ import GlassSurface from '../surfaces/GlassSurface';
 import FileGrid from './FileGrid';
 import FileList from './FileList';
 import DetailsTable from './DetailsTable';
+import { useViewportReporting } from '../../hooks/useViewportReporting';
 
 export type ViewMode = 'icon' | 'list' | 'details';
 
 interface FileBrowserProps {
   path: string;
+  activeTabId?: string;
+  interactionEpoch?: number;
+  lastInputAtMs?: number | null;
   entries: DirectoryEntry[];
   loading: boolean;
   error: string | null;
@@ -18,6 +22,7 @@ interface FileBrowserProps {
   filterKind?: 'all' | 'folders' | 'files' | 'images' | 'documents' | 'videos';
   showHiddenFiles?: boolean;
   showFileExtensions?: boolean;
+  onUserInteraction?: () => void;
   onOpenEntry: (entry: DirectoryEntry) => void;
 }
 
@@ -33,18 +38,30 @@ const VIEW_BUTTONS: { mode: ViewMode; label: string }[] = [
 
 function FileBrowser({
   path,
+  activeTabId = 'tab-1',
+  interactionEpoch = 0,
+  lastInputAtMs = null,
   entries,
   loading,
   error,
   isTauriRuntime,
   showFileExtensions = true,
+  onUserInteraction = () => {},
   onOpenEntry,
 }: FileBrowserProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const isPreviewPath = !isFilesystemPath(path);
+  useViewportReporting({
+    activeTabId,
+    interactionEpoch,
+    lastInputAtMs,
+    visibleRange: null,
+    reportWhenRangeMissing: isPreviewPath || loading || Boolean(error) || entries.length === 0,
+  });
 
   function toggleSelect(entryPath: string) {
+    onUserInteraction();
     setSelectedPaths((prev) => {
       const next = new Set(prev);
       if (next.has(entryPath)) {
@@ -58,6 +75,7 @@ function FileBrowser({
 
   function handleEntryOpen(entry: DirectoryEntry) {
     if (entry.isFolder) {
+      onUserInteraction();
       onOpenEntry(entry);
     }
   }
@@ -88,6 +106,9 @@ function FileBrowser({
       showFileExtensions,
       onToggleSelect: toggleSelect,
       onOpenEntry: handleEntryOpen,
+      activeTabId,
+      interactionEpoch,
+      lastInputAtMs,
     };
 
     switch (viewMode) {
@@ -133,7 +154,10 @@ function FileBrowser({
               role="button"
               aria-label={label}
               aria-pressed={viewMode === mode}
-              onClick={() => setViewMode(mode)}
+              onClick={() => {
+                onUserInteraction();
+                setViewMode(mode);
+              }}
               style={{
                 padding: '4px 10px',
                 fontSize: 11,

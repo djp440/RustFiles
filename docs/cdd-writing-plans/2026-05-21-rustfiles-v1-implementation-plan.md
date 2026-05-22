@@ -615,7 +615,7 @@ git add src-tauri/src/core/fs.rs src-tauri/src/core/snapshot.rs src/components/f
 git commit -m "feat: virtualize large directories"
 ```
 
-## Task 3.2: 实现 UI 优先调度信号与性能采样
+## Task 3.2: 实现 UI 优先调度信号与性能采样（已完成）
 
 **Files:**
 - Create: `src-tauri/src/core/scheduler.rs`
@@ -627,27 +627,27 @@ git commit -m "feat: virtualize large directories"
 - Test: `src/test/interaction-reporting.test.ts`
 - Test: `e2e/ui-priority.spec.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Rust 测试给出 `active_tab_id`、`visible_range`、`last_input_at`、`is_scrolling`、`interaction_epoch` 后，断言优先级顺序为前台目录枚举、可视缩略图、前台搜索、文件进度、后台刷新、非可视缩略图、后台递归搜索。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml scheduler && npm run test -- src/test/interaction-reporting.test.ts`
 
 Expected: scheduler 或前端上报 hook 缺失。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 实现 `report_viewport_state`、`report_interaction_state` command。前端滚动、选择、路径跳转、标签切换时上报；Rust 对 `thumbnail_ready`、`search_result_batch` 做批量事件背压。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run check:all`
 
 Expected: scheduler 和上报测试通过。
 
-- [ ] **Step 5: 运行 UI 优先 e2e**
+- [x] **Step 5: 运行 UI 优先 e2e**
 
 Run: `npm run e2e -- e2e/ui-priority.spec.ts`
 

@@ -28,6 +28,7 @@ import {
   submitTabPath,
 } from '../../stores/tabs';
 import { loadSettings, saveSettings, settingsStore } from '../../stores/settings';
+import { useInteractionReporting } from '../../hooks/useInteractionReporting';
 
 const INITIAL_ROOTS: SidebarRoots = {
   desktop: 'Desktop',
@@ -51,6 +52,9 @@ function AppShell() {
   const [settingsState, setSettingsState] = useState(() => settingsStore.getState());
   const [filterKind, setFilterKind] = useState<DirectoryPage['filterKind']>('all');
   const [settingsReady, setSettingsReady] = useState(false);
+  const { interactionEpoch, lastInputAtMs, reportInteraction } = useInteractionReporting({
+    activeTabId: tab.id,
+  });
 
   useEffect(() => {
     if (!isTauriRuntime) {
@@ -167,6 +171,35 @@ function AppShell() {
     });
   }
 
+  function handleSidebarSelectPath(path: string) {
+    void reportInteraction();
+    setTab((currentTab) => submitTabPath(currentTab, path));
+  }
+
+  function handleBack() {
+    void reportInteraction();
+    setTab((currentTab) => goBackInTab(currentTab));
+  }
+
+  function handleForward() {
+    void reportInteraction();
+    setTab((currentTab) => goForwardInTab(currentTab));
+  }
+
+  function handleSubmitPath(path: string) {
+    void reportInteraction();
+    setTab((currentTab) => submitTabPath(currentTab, path));
+  }
+
+  function handleBreadcrumbSelect(path: string) {
+    void reportInteraction();
+    setTab((currentTab) => navigateTabToBreadcrumb(currentTab, path));
+  }
+
+  function handleOpenEntry(entry: Parameters<typeof navigateTabToEntry>[1]) {
+    setTab((currentTab) => navigateTabToEntry(currentTab, entry));
+  }
+
   return (
     <div
       style={{
@@ -184,12 +217,10 @@ function AppShell() {
         canGoBack={canGoBack(tab)}
         canGoForward={canGoForward(tab)}
         breadcrumbSegments={getBreadcrumbSegments(tab.path)}
-        onBack={() => setTab((currentTab) => goBackInTab(currentTab))}
-        onForward={() => setTab((currentTab) => goForwardInTab(currentTab))}
-        onSubmitPath={(path) => setTab((currentTab) => submitTabPath(currentTab, path))}
-        onSelectBreadcrumb={(path) =>
-          setTab((currentTab) => navigateTabToBreadcrumb(currentTab, path))
-        }
+        onBack={handleBack}
+        onForward={handleForward}
+        onSubmitPath={handleSubmitPath}
+        onSelectBreadcrumb={handleBreadcrumbSelect}
       />
       <Toolbar
         sortKey={settingsState.settings.sortKey}
@@ -209,10 +240,13 @@ function AppShell() {
           drives={drives}
           isTauriRuntime={isTauriRuntime}
           activePath={tab.path}
-          onSelectPath={(path) => setTab((currentTab) => submitTabPath(currentTab, path))}
+          onSelectPath={handleSidebarSelectPath}
         />
         <FileBrowser
           path={tab.path}
+          activeTabId={tab.id}
+          interactionEpoch={interactionEpoch}
+          lastInputAtMs={lastInputAtMs}
           entries={tab.entries}
           loading={tab.loading}
           error={tab.error}
@@ -222,7 +256,8 @@ function AppShell() {
           filterKind={filterKind}
           showHiddenFiles={settingsState.settings.showHiddenFiles}
           showFileExtensions={settingsState.settings.showFileExtensions}
-          onOpenEntry={(entry) => setTab((currentTab) => navigateTabToEntry(currentTab, entry))}
+          onOpenEntry={handleOpenEntry}
+          onUserInteraction={() => void reportInteraction()}
         />
       </div>
     </div>

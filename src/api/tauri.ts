@@ -1,5 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
 
+export interface VisibleRange {
+  start_index: number;
+  end_index: number;
+}
+
 export interface DirectoryEntry {
   path: string;
   name: string;
@@ -20,6 +25,55 @@ export interface DirectoryPage {
   snapshotVersion: number;
   offset: number;
   limit: number;
+}
+
+export type SchedulerReportKind = 'viewport' | 'interaction';
+
+export type WorkKind =
+  | 'foreground_directory_enumeration'
+  | 'visible_thumbnail'
+  | 'foreground_search'
+  | 'file_progress'
+  | 'background_refresh'
+  | 'non_visible_thumbnail'
+  | 'background_recursive_search';
+
+export interface SchedulerSignal {
+  active_tab_id: string;
+  visible_range: VisibleRange | null;
+  last_input_at_ms: number | null;
+  is_scrolling: boolean;
+  interaction_epoch: number;
+}
+
+export interface SchedulerReportAck {
+  accepted: boolean;
+  report_kind: SchedulerReportKind;
+  active_tab_id: string;
+  interaction_epoch: number;
+  visible_range: VisibleRange | null;
+  priority_order: WorkKind[];
+  interaction_latency_ms: number | null;
+  frame_budget_degraded: boolean;
+  stale_interaction_epoch: boolean;
+  tracked_interaction_epoch: number;
+  summary: string;
+}
+
+export interface SchedulerDebugReport {
+  report_kind: SchedulerReportKind;
+  signal: SchedulerSignal;
+  ack: SchedulerReportAck;
+  recorded_at_ms: number;
+}
+
+export interface SchedulerDebugState {
+  reports: SchedulerDebugReport[];
+  viewport_reports: SchedulerDebugReport[];
+  interaction_reports: SchedulerDebugReport[];
+  latest_viewport_ack: SchedulerReportAck | null;
+  latest_interaction_ack: SchedulerReportAck | null;
+  latest_report: SchedulerDebugReport | null;
 }
 
 export interface ListDirectoryOptions {
@@ -79,6 +133,15 @@ interface RawSettings {
   sort_ascending?: boolean;
 }
 
+interface SchedulerDebugTarget {
+  __RUSTFILES_SCHEDULER_DEBUG__?: SchedulerDebugState;
+}
+
+interface SchedulerReportingTarget {
+  __RUSTFILES_REPORT_VIEWPORT_STATE__?: typeof reportViewportState;
+  __RUSTFILES_REPORT_INTERACTION_STATE__?: typeof reportInteractionState;
+}
+
 const FALLBACK_ROOTS: SidebarRoots = {
   desktop: 'Desktop',
   downloads: 'Downloads',
@@ -100,6 +163,185 @@ const FALLBACK_SETTINGS: Settings = {
   sortKey: 'name',
   sortAscending: true,
 };
+
+const SCHEDULER_PRIORITY_ORDER: WorkKind[] = [
+  'foreground_directory_enumeration',
+  'visible_thumbnail',
+  'foreground_search',
+  'file_progress',
+  'background_refresh',
+  'non_visible_thumbnail',
+  'background_recursive_search',
+];
+
+const tabInteractionEpochs = new Map<string, number>();
+
+function getSchedulerDebugTarget(): SchedulerDebugTarget {
+  return globalThis as unknown as SchedulerDebugTarget;
+}
+
+function getSchedulerReportingTarget(): SchedulerReportingTarget {
+  return globalThis as unknown as SchedulerReportingTarget;
+}
+
+function createEmptySchedulerDebugState(): SchedulerDebugState {
+  return {
+    reports: [],
+    viewport_reports: [],
+    interaction_reports: [],
+    latest_viewport_ack: null,
+    latest_interaction_ack: null,
+    latest_report: null,
+  };
+}
+
+function getSchedulerDebugState(): SchedulerDebugState {
+  const target = getSchedulerDebugTarget();
+  if (!target.__RUSTFILES_SCHEDULER_DEBUG__) {
+    target.__RUSTFILES_SCHEDULER_DEBUG__ = createEmptySchedulerDebugState();
+  }
+
+  return target.__RUSTFILES_SCHEDULER_DEBUG__;
+}
+
+export function resetSchedulerDebugState() {
+  tabInteractionEpochs.clear();
+  const target = getSchedulerDebugTarget();
+  target.__RUSTFILES_SCHEDULER_DEBUG__ = createEmptySchedulerDebugState();
+}
+
+function updateSchedulerDebugState(report: SchedulerDebugReport) {
+  const state = getSchedulerDebugState();
+  state.reports.push(report);
+  state.latest_report = report;
+
+  if (report.report_kind === 'viewport') {
+    state.viewport_reports.push(report);
+    state.latest_viewport_ack = report.ack;
+  } else {
+    state.interaction_reports.push(report);
+    state.latest_interaction_ack = report.ack;
+  }
+}
+
+function visibleSpan(visibleRange: VisibleRange | null): number | null {
+  if (!visibleRange) {
+    return null;
+  }
+
+  return visibleRange.end_index - visibleRange.start_index + 1;
+}
+
+function priorityScore(signal: SchedulerSignal, workKind: WorkKind): number {
+  const span = visibleSpan(signal.visible_range);
+
+  switch (workKind) {
+    case 'foreground_directory_enumeration':
+      return 0;
+    case 'visible_thumbnail':
+      return span && span > 0 ? 10 : 12;
+    case 'foreground_search':
+      return 20;
+    case 'file_progress':
+      return 30;
+    case 'background_refresh':
+      return signal.is_scrolling ? 50 : 40;
+    case 'non_visible_thumbnail':
+      return signal.is_scrolling ? 110 : 50;
+    case 'background_recursive_search':
+      return signal.is_scrolling ? 130 : 60;
+    default:
+      return 999;
+  }
+}
+
+function priorityOrder(signal: SchedulerSignal): WorkKind[] {
+  return [...SCHEDULER_PRIORITY_ORDER].sort((left, right) => {
+    const scoreDelta = priorityScore(signal, left) - priorityScore(signal, right);
+    if (scoreDelta !== 0) {
+      return scoreDelta;
+    }
+
+    return SCHEDULER_PRIORITY_ORDER.indexOf(left) - SCHEDULER_PRIORITY_ORDER.indexOf(right);
+  });
+}
+
+function summarizeAck(
+  signal: SchedulerSignal,
+  reportKind: SchedulerReportKind,
+  interactionLatencyMs: number | null,
+  frameBudgetDegraded: boolean,
+): SchedulerReportAck {
+  const order = priorityOrder(signal);
+  const trackedInteractionEpoch = tabInteractionEpochs.get(signal.active_tab_id) ?? 0;
+  const staleInteractionEpoch = signal.interaction_epoch < trackedInteractionEpoch;
+
+  if (!staleInteractionEpoch) {
+    tabInteractionEpochs.set(signal.active_tab_id, signal.interaction_epoch);
+  }
+
+  const summary =
+    reportKind === 'viewport'
+      ? `viewport ack for tab '${signal.active_tab_id}' with ${order.length} priority tiers${
+          frameBudgetDegraded ? ', frame budget degraded' : ''
+        }${staleInteractionEpoch ? ', stale interaction epoch detected' : ''}`
+      : `interaction ack for tab '${signal.active_tab_id}' with latency ${
+          interactionLatencyMs === null ? 'unknown' : `${interactionLatencyMs}ms`
+        }${frameBudgetDegraded ? ', frame budget degraded' : ''}`;
+
+  const ack: SchedulerReportAck = {
+    accepted: true,
+    report_kind: reportKind,
+    active_tab_id: signal.active_tab_id,
+    interaction_epoch: signal.interaction_epoch,
+    visible_range: signal.visible_range,
+    priority_order: order,
+    interaction_latency_ms: interactionLatencyMs,
+    frame_budget_degraded: frameBudgetDegraded,
+    stale_interaction_epoch: staleInteractionEpoch,
+    tracked_interaction_epoch: tabInteractionEpochs.get(signal.active_tab_id) ?? 0,
+    summary,
+  };
+
+  updateSchedulerDebugState({
+    report_kind: reportKind,
+    signal,
+    ack,
+    recorded_at_ms: Date.now(),
+  });
+
+  return ack;
+}
+
+function reportSignal(
+  reportKind: SchedulerReportKind,
+  signal: SchedulerSignal,
+): SchedulerReportAck {
+  const nowMs = Date.now();
+  const interactionLatencyMs =
+    signal.last_input_at_ms === null ? null : Math.max(0, nowMs - signal.last_input_at_ms);
+  const span = visibleSpan(signal.visible_range);
+
+  const frameBudgetDegraded =
+    reportKind === 'viewport' ? signal.is_scrolling || (span !== null && span >= 128) : signal.is_scrolling;
+
+  return summarizeAck(signal, reportKind, interactionLatencyMs, frameBudgetDegraded);
+}
+
+async function invokeSchedulerReport(
+  command: 'report_viewport_state' | 'report_interaction_state',
+  signal: SchedulerSignal,
+): Promise<SchedulerReportAck> {
+  if (!hasTauriRuntime()) {
+    return reportSignal(command === 'report_viewport_state' ? 'viewport' : 'interaction', signal);
+  }
+
+  const ack = await invoke<SchedulerReportAck>(command, {
+    signal,
+  });
+
+  return ack;
+}
 
 function toCamelDirectoryPage(page: {
   path: string;
@@ -168,6 +410,18 @@ function toRawSettings(settings: Settings): RawSettings {
 export function hasTauriRuntime(): boolean {
   return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
 }
+
+export async function reportViewportState(signal: SchedulerSignal): Promise<SchedulerReportAck> {
+  return invokeSchedulerReport('report_viewport_state', signal);
+}
+
+export async function reportInteractionState(signal: SchedulerSignal): Promise<SchedulerReportAck> {
+  return invokeSchedulerReport('report_interaction_state', signal);
+}
+
+const schedulerReportingTarget = getSchedulerReportingTarget();
+schedulerReportingTarget.__RUSTFILES_REPORT_VIEWPORT_STATE__ = reportViewportState;
+schedulerReportingTarget.__RUSTFILES_REPORT_INTERACTION_STATE__ = reportInteractionState;
 
 export async function listDirectory(path: string, options: ListDirectoryOptions = {}): Promise<DirectoryPage> {
   if (!hasTauriRuntime()) {

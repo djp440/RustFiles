@@ -2,6 +2,7 @@ pub mod error;
 pub mod fs;
 pub mod observability;
 pub mod path_safety;
+pub mod scheduler;
 pub mod runtime;
 pub mod settings;
 pub mod snapshot;
