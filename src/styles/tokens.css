@@ -1,0 +1,64 @@
+:root {
+  /* Surface colors */
+  --bg-window: #0c0c0c;
+  --surface-chrome: rgba(28, 28, 28, 0.6);
+  --surface-content: rgba(35, 35, 35, 0.4);
+  --surface-floating: rgba(60, 60, 60, 0.4);
+  --surface-solid-safety: #1a1a1a;
+
+  /* Glass effects */
+  --glass-blur-sm: 8px;
+  --glass-blur-md: 16px;
+  --glass-blur-lg: 32px;
+  --glass-border-light: rgba(255, 255, 255, 0.08);
+  --glass-border-strong: rgba(255, 255, 255, 0.14);
+
+  /* Text colors */
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-tertiary: rgba(255, 255, 255, 0.5);
+  --text-error: #f87171;
+  --text-accent: #60a5fa;
+
+  /* Border colors */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  /* UI constants */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  --z-index-base: 1;
+  --z-index-chrome: 100;
+  --z-index-floating: 200;
+  --z-index-dialog: 1000;
+  --z-index-toast: 2000;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --surface-chrome: #1c1c1c;
+    --surface-content: #232323;
+    --surface-floating: #3c3c3c;
+    --glass-blur-sm: 0;
+    --glass-blur-md: 0;
+    --glass-blur-lg: 0;
+  }
+}
+
+@media (forced-colors: active) {
+  :root {
+    --bg-window: Canvas;
+    --surface-chrome: Canvas;
+    --surface-content: Canvas;
+    --surface-floating: Canvas;
+    --surface-solid-safety: Canvas;
+    --text-primary: CanvasText;
+    --text-secondary: CanvasText;
+    --text-tertiary: CanvasText;
+    --border-subtle: ButtonBorder;
+    --border-strong: ButtonBorder;
+  }
+}

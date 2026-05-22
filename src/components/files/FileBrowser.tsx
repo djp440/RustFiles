@@ -1,4 +1,11 @@
+import { useState } from 'react';
 import type { DirectoryEntry } from '../../api/tauri';
+import GlassSurface from '../surfaces/GlassSurface';
+import FileGrid from './FileGrid';
+import FileList from './FileList';
+import DetailsTable from './DetailsTable';
+
+export type ViewMode = 'icon' | 'list' | 'details';
 
 interface FileBrowserProps {
   path: string;
@@ -18,51 +25,11 @@ function isFilesystemPath(path: string): boolean {
   return /^[A-Za-z]:\\/.test(path) || path.startsWith('\\\\');
 }
 
-function getDisplayName(entry: DirectoryEntry, showFileExtensions: boolean): string {
-  if (entry.isFolder || showFileExtensions) {
-    return entry.name;
-  }
-
-  const lastDotIndex = entry.name.lastIndexOf('.');
-
-  if (lastDotIndex <= 0) {
-    return entry.name;
-  }
-
-  return entry.name.slice(0, lastDotIndex);
-}
-
-function formatSortKey(sortKey: FileBrowserProps['sortKey']): string {
-  switch (sortKey) {
-    case 'modified':
-      return 'Modified';
-    case 'size':
-      return 'Size';
-    case 'type':
-      return 'Type';
-    case 'name':
-    default:
-      return 'Name';
-  }
-}
-
-function formatFilterKind(filterKind: FileBrowserProps['filterKind']): string {
-  switch (filterKind) {
-    case 'folders':
-      return 'Folders';
-    case 'files':
-      return 'Files';
-    case 'images':
-      return 'Images';
-    case 'documents':
-      return 'Documents';
-    case 'videos':
-      return 'Videos';
-    case 'all':
-    default:
-      return 'All';
-  }
-}
+const VIEW_BUTTONS: { mode: ViewMode; label: string }[] = [
+  { mode: 'list', label: 'List view' },
+  { mode: 'icon', label: 'Icon view' },
+  { mode: 'details', label: 'Details view' },
+];
 
 function FileBrowser({
   path,
@@ -70,53 +37,125 @@ function FileBrowser({
   loading,
   error,
   isTauriRuntime,
-  sortKey = 'name',
-  sortAscending = true,
-  filterKind = 'all',
-  showHiddenFiles = false,
   showFileExtensions = true,
   onOpenEntry,
 }: FileBrowserProps) {
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const isPreviewPath = !isFilesystemPath(path);
 
-  return (
-    <section aria-label="File browser" style={{ padding: 16, display: 'grid', gap: 12 }}>
-      <div>
-        <strong>Current location:</strong> {path}
-      </div>
-      <div aria-label="View settings">
-        View settings: {formatSortKey(sortKey)}, {sortAscending ? 'Ascending' : 'Descending'},{' '}
-        {formatFilterKind(filterKind)}, Hidden {showHiddenFiles ? 'on' : 'off'}, Extensions{' '}
-        {showFileExtensions ? 'on' : 'off'}
-      </div>
-      {loading ? <div>Loading directory...</div> : null}
-      {error ? <div role="alert">{error}</div> : null}
-      {!loading && !error && isPreviewPath ? (
-        <div>
+  function toggleSelect(entryPath: string) {
+    setSelectedPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(entryPath)) {
+        next.delete(entryPath);
+      } else {
+        next.add(entryPath);
+      }
+      return next;
+    });
+  }
+
+  function handleEntryOpen(entry: DirectoryEntry) {
+    if (entry.isFolder) {
+      onOpenEntry(entry);
+    }
+  }
+
+  function renderView() {
+    if (loading) {
+      return <div style={{ color: 'var(--text-secondary)', padding: '20px' }}>Loading directory...</div>;
+    }
+    if (error) {
+      return <div role="alert" style={{ color: 'var(--text-error)', padding: '20px' }}>{error}</div>;
+    }
+    if (isPreviewPath) {
+      return (
+        <div style={{ color: 'var(--text-secondary)', padding: '20px', textAlign: 'center' }}>
           {isTauriRuntime
             ? 'This location is a virtual entry. Select a drive or folder to browse files.'
             : 'This location is a preview entry. Browse real folders in the desktop app runtime.'}
         </div>
-      ) : null}
-      {!loading && !error && !isPreviewPath && entries.length === 0 ? <div>No items to show.</div> : null}
-      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
-        {entries.map((entry) => (
-          <li key={entry.path}>
+      );
+    }
+    if (entries.length === 0) {
+      return <div style={{ color: 'var(--text-tertiary)', padding: '20px', textAlign: 'center' }}>No items to show.</div>;
+    }
+
+    const viewProps = {
+      entries,
+      selectedPaths,
+      showFileExtensions,
+      onToggleSelect: toggleSelect,
+      onOpenEntry: handleEntryOpen,
+    };
+
+    switch (viewMode) {
+      case 'icon':
+        return <FileGrid {...viewProps} />;
+      case 'details':
+        return <DetailsTable {...viewProps} />;
+      case 'list':
+      default:
+        return <FileList {...viewProps} />;
+    }
+  }
+
+  return (
+    <GlassSurface
+      variant="content"
+      role="region"
+      aria-label="File browser"
+      style={{
+        display: 'grid',
+        gridTemplateRows: 'auto 1fr',
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '12px 16px',
+          borderBottom: '1px solid var(--border-subtle)',
+        }}
+      >
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <strong style={{ color: 'var(--text-primary)' }}>Location:</strong> {path}
+        </div>
+        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+          {VIEW_BUTTONS.map(({ mode, label }) => (
             <button
+              key={mode}
               type="button"
-              onClick={() => onOpenEntry(entry)}
-              disabled={!entry.isFolder}
-              style={{ width: '100%', textAlign: 'left' }}
+              role="button"
+              aria-label={label}
+              aria-pressed={viewMode === mode}
+              onClick={() => setViewMode(mode)}
+              style={{
+                padding: '4px 10px',
+                fontSize: 11,
+                fontWeight: 500,
+                cursor: 'pointer',
+                border: '1px solid transparent',
+                borderRadius: 'var(--radius-sm)',
+                background: viewMode === mode ? 'var(--surface-floating)' : 'transparent',
+                borderColor: viewMode === mode ? 'var(--border-strong)' : 'transparent',
+                color: viewMode === mode ? 'var(--text-primary)' : 'var(--text-secondary)',
+                transition: 'all 0.2s',
+              }}
             >
-              <span>{getDisplayName(entry, showFileExtensions)}</span>
-              <span style={{ marginLeft: 8, opacity: 0.7 }}>
-                {entry.isFolder ? 'Folder' : 'File'}
-              </span>
+              {mode.charAt(0).toUpperCase() + mode.slice(1)}
             </button>
-          </li>
-        ))}
-      </ul>
-    </section>
+          ))}
+        </div>
+      </div>
+      <div style={{ overflow: 'auto', minHeight: 0 }}>
+        {renderView()}
+      </div>
+    </GlassSurface>
   );
 }
 

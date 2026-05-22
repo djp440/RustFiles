@@ -537,33 +537,33 @@ git commit -m "feat: add sorting filtering and settings persistence"
 - Test: `src/test/view-mode.test.tsx`
 - Test: `e2e/glass-readability.spec.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 组件测试验证切换图标、列表、详情视图后保留选择和路径；e2e 截图检查浅色、深色、降低透明度下文件名可见，行高和网格 cell 不变化。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm run test -- src/test/view-mode.test.tsx`
 
 Expected: 视图组件缺失。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 定义 `bg.window`、`surface.chrome`、`surface.content`、`surface.floating`、`surface.solidSafety`、`text.*`、`border.*`、`glass.*`、`z-index` token。实现 `GlassSurface` 的 `chrome`、`content`、`floating`、`solid-safety` 变体。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run test -- src/test/view-mode.test.tsx && npm run typecheck`
 
 Expected: 视图状态和类型检查通过。
 
-- [ ] **Step 5: 运行视觉 e2e**
+- [x] **Step 5: 运行视觉 e2e**
 
 Run: `npm run e2e -- e2e/glass-readability.spec.ts`
 
 Expected: 文件列表文本可读，forced-colors / reduced-transparency fallback 生效，视图切换不引发布局跳动。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/styles src/components/surfaces src/components/files src/test e2e
