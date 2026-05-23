@@ -6,6 +6,86 @@ use crate::core::error::{AppError, ErrorCode};
 use crate::core::search::{create_task_id, SearchRequest, SearchResultBatch, SearchTaskSnapshot, TaskId};
 use crate::core::types::TaskStatus;
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct TaskSummary {
+    pub id: String,
+    pub kind: String,
+    pub status: TaskStatus,
+    pub message: Option<String>,
+    pub completed_items: Vec<String>,
+    pub incomplete_items: Vec<String>,
+    pub unknown_items: Vec<String>,
+    pub can_cancel: bool,
+}
+
+fn is_terminal(status: &TaskStatus) -> bool {
+    matches!(
+        status,
+        TaskStatus::Cancelled
+            | TaskStatus::Completed
+            | TaskStatus::Failed
+            | TaskStatus::PartiallyCompleted
+    )
+}
+
+fn allowed_next_statuses(status: &TaskStatus) -> &'static [TaskStatus] {
+    match status {
+        TaskStatus::Queued => &[TaskStatus::Validating, TaskStatus::Cancelling],
+        TaskStatus::Validating => &[TaskStatus::Running, TaskStatus::Failed, TaskStatus::Cancelling],
+        TaskStatus::Running => &[
+            TaskStatus::WaitingForConflictDecision,
+            TaskStatus::Cancelling,
+            TaskStatus::Completed,
+            TaskStatus::Failed,
+            TaskStatus::PartiallyCompleted,
+        ],
+        TaskStatus::WaitingForConflictDecision => {
+            &[TaskStatus::Running, TaskStatus::Cancelling, TaskStatus::Failed]
+        }
+        TaskStatus::Cancelling => &[
+            TaskStatus::Cancelled,
+            TaskStatus::PartiallyCompleted,
+            TaskStatus::Failed,
+        ],
+        TaskStatus::Cancelled | TaskStatus::Completed | TaskStatus::Failed | TaskStatus::PartiallyCompleted => &[],
+    }
+}
+
+pub fn apply_task_transition(
+    current: &TaskSummary,
+    next_status: TaskStatus,
+) -> Result<TaskSummary, AppError> {
+    if current.status == next_status {
+        return Ok(current.clone());
+    }
+
+    if is_terminal(&current.status) {
+        return Err(AppError::new(
+            ErrorCode::InternalError,
+            format!("终态任务不能再次迁移: {} -> {:?}", current.id, next_status),
+        ));
+    }
+
+    if !allowed_next_statuses(&current.status).contains(&next_status) {
+        return Err(AppError::new(
+            ErrorCode::InternalError,
+            format!("非法任务迁移: {:?} -> {:?}", current.status, next_status),
+        ));
+    }
+
+    let mut next = current.clone();
+    next.status = next_status;
+    next.can_cancel = matches!(
+        next.status,
+        TaskStatus::Queued
+            | TaskStatus::Validating
+            | TaskStatus::Running
+            | TaskStatus::WaitingForConflictDecision
+            | TaskStatus::Cancelling
+    );
+    Ok(next)
+}
+
 struct SearchTaskHandle {
     request: SearchRequest,
     status: Mutex<TaskStatus>,

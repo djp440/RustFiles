@@ -26,8 +26,10 @@ npm run e2e -- e2e/glass-readability.spec.ts # 视图与 Glass 材质 e2e
 npm run e2e -- e2e/performance.spec.ts      # 大目录虚拟列表 e2e
 npm run e2e -- e2e/ui-priority.spec.ts      # UI 优先调度 browser-preview e2e
 npm run e2e -- e2e/search.spec.ts           # 搜索、取消与打开所在位置 browser-preview e2e
+npm run e2e -- e2e/task-panel.spec.ts       # 任务面板 browser-preview e2e
 npm run test -- src/test/interaction-reporting.test.ts # 调度上报前端测试
 npm run test -- src/test/search-store.test.ts          # 搜索 store 前端测试
+npm run test -- src/test/task-panel.test.tsx           # 任务面板前端测试
 ```
 
 ## 项目文档

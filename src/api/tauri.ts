@@ -136,6 +136,17 @@ export type TaskStatus =
   | 'failed'
   | 'partially_completed';
 
+export interface TaskSummary {
+  id: string;
+  kind: string;
+  status: TaskStatus;
+  message: string | null;
+  completed_items: string[];
+  incomplete_items: string[];
+  unknown_items: string[];
+  can_cancel: boolean;
+}
+
 export interface AppError {
   code: string;
   message: string;
@@ -210,6 +221,29 @@ const FALLBACK_SETTINGS: Settings = {
   sortKey: 'name',
   sortAscending: true,
 };
+
+const FALLBACK_TASKS: TaskSummary[] = [
+  {
+    id: 'task-preview-1',
+    kind: 'copy_items',
+    status: 'running',
+    message: 'Copying 2 items',
+    completed_items: ['a.txt'],
+    incomplete_items: ['b.txt'],
+    unknown_items: [],
+    can_cancel: true,
+  },
+  {
+    id: 'task-preview-2',
+    kind: 'move_items',
+    status: 'waiting_for_conflict_decision',
+    message: 'Waiting for conflict decision',
+    completed_items: ['done.txt'],
+    incomplete_items: ['todo.txt'],
+    unknown_items: ['unknown.txt'],
+    can_cancel: true,
+  },
+];
 
 const PREVIEW_DIRECTORY_MAP: Record<string, Array<{ path: string; name: string; isFolder: boolean }>> = {
   'C:\\Users\\demo': [
@@ -666,6 +700,10 @@ export async function getSettings(): Promise<Settings> {
   } catch {
     return FALLBACK_SETTINGS;
   }
+}
+
+export function getFallbackTaskSummaries(): TaskSummary[] {
+  return FALLBACK_TASKS;
 }
 
 export async function updateSettings(settings: Settings): Promise<Settings> {

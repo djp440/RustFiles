@@ -9,6 +9,7 @@ import {
   type SidebarRoots,
 } from '../../api/tauri';
 import FileBrowser from '../files/FileBrowser';
+import TaskPanel from '../tasks/TaskPanel';
 import NavigationBar from '../navigation/NavigationBar';
 import Toolbar from '../toolbar/Toolbar';
 import Sidebar from '../sidebar/Sidebar';
@@ -232,7 +233,7 @@ function AppShell() {
       style={{
         minHeight: '100vh',
         display: 'grid',
-        gridTemplateRows: 'auto auto auto 1fr',
+        gridTemplateRows: 'auto auto auto auto 1fr',
         background: '#111827',
         color: '#f9fafb',
         fontFamily: 'Segoe UI, sans-serif',
@@ -261,6 +262,7 @@ function AppShell() {
         onShowHiddenFilesChange={handleShowHiddenFilesChange}
         onShowFileExtensionsChange={handleShowFileExtensionsChange}
       />
+      <TaskPanel />
       <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', minHeight: 0 }}>
         <Sidebar
           roots={roots}

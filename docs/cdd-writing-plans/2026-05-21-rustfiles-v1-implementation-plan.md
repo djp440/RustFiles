@@ -705,7 +705,7 @@ git add src-tauri/src/core/search.rs src-tauri/src/core/tasks.rs src-tauri/src/c
 git commit -m "feat: add current directory search"
 ```
 
-## Task 5.1: 实现任务状态机和任务面板
+## Task 5.1: 实现任务状态机和任务面板（已完成）
 
 **Files:**
 - Create: `src-tauri/src/core/tasks.rs`
@@ -714,33 +714,33 @@ git commit -m "feat: add current directory search"
 - Test: `src-tauri/tests/task_state_machine.rs`
 - Test: `src/test/task-panel.test.tsx`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 测试所有合法状态迁移和非法迁移拒绝；前端任务面板测试覆盖摘要态、展开态、冲突等待、取消中、失败和部分完成。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml task_state_machine && npm run test -- src/test/task-panel.test.tsx`
 
 Expected: 状态机或任务面板缺失。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 Rust 只允许任务状态由 tasks 模块推进。终态必须包含结果摘要；`partially_completed` 必须列出已完成、未完成和未知项。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run check:all`
 
 Expected: 状态机和任务面板测试通过。
 
-- [ ] **Step 5: 运行任务面板 e2e**
+- [x] **Step 5: 运行任务面板 e2e**
 
 Run: `npm run e2e -- e2e/task-panel.spec.ts`
 
 Expected: 模拟任务事件时，摘要态不长期挤压文件列表，展开态可查看详情和取消。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src-tauri/src/core/tasks.rs src/stores/tasks.ts src/components/tasks src-tauri/tests src/test e2e
