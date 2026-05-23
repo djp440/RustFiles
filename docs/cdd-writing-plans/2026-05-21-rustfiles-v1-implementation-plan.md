@@ -660,7 +660,7 @@ git add src-tauri/src/core/scheduler.rs src-tauri/src/core/observability.rs src-
 git commit -m "feat: prioritize visible UI work"
 ```
 
-## Task 4.1: 实现当前目录搜索和递归搜索任务
+## Task 4.1: 实现当前目录搜索和递归搜索任务（已完成）
 
 **Files:**
 - Create: `src-tauri/src/core/search.rs`
@@ -672,33 +672,33 @@ git commit -m "feat: prioritize visible UI work"
 - Test: `src/test/search-store.test.ts`
 - Test: `e2e/search.spec.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Rust 测试覆盖非递归搜索、递归搜索、取消、无权限目录跳过并返回错误摘要。前端测试覆盖输入防抖、实时结果、清除搜索、打开所在位置。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml search && npm run test -- src/test/search-store.test.ts`
 
 Expected: search module 和 store 缺失。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 非递归搜索优先使用当前 `DirectoryPage` 快照；递归搜索进入可取消后台任务，服从 scheduler，结果通过 `search_result_batch` 批量发送。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run check:all`
 
 Expected: 搜索单元测试和类型检查通过。
 
-- [ ] **Step 5: 运行 V0.4 e2e**
+- [x] **Step 5: 运行 V0.4 e2e**
 
 Run: `npm run e2e -- e2e/search.spec.ts`
 
 Expected: 搜索文件名实时过滤；递归搜索可取消；打开所在位置导航到正确目录；目标消失时显示“项目已不存在或已移动”并刷新。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src-tauri/src/core/search.rs src-tauri/src/core/tasks.rs src-tauri/src/commands.rs src/stores/search.ts src/components/toolbar src-tauri/tests src/test e2e

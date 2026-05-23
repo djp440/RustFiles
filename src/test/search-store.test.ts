@@ -276,4 +276,49 @@ describe('search store', () => {
     expect(staleRefreshCurrentDirectory).toHaveBeenCalledTimes(1);
     expect(isSearchResultStale(item, 11, 'C:\\Users\\demo\\Projects\\RustFiles')).toBe(true);
   });
+
+  it('keeps the missing-location alert visible while the refreshed directory syncs back in', async () => {
+    const store = createStore();
+    const batch: SearchResultBatch = {
+      task_id: 'search-task-1',
+      root_path: 'C:\\Users\\demo',
+      query: 'search',
+      recursive: true,
+      snapshot_version: 10,
+      matches: [
+        {
+          path: 'C:\\Users\\demo\\Projects\\RustFiles\\search-notes.txt',
+          name: 'search-notes.txt',
+          size: 1024,
+          modified: 1_700_000_010,
+          isHidden: false,
+          isFolder: false,
+        },
+      ],
+      error_summaries: [],
+    };
+
+    const [item] = flattenSearchResultBatches([batch]);
+    const navigateToPath = vi.fn();
+    const refreshCurrentDirectory = vi.fn(async () => {
+      store.setContext({
+        currentPath: 'C:\\Users\\demo\\Projects\\RustFiles',
+        currentSnapshotVersion: 11,
+        currentEntries: ROOT_ENTRIES,
+        isTauriRuntime: true,
+      });
+    });
+
+    await store.openSearchResultLocation(item, {
+      currentPath: 'C:\\Users\\demo\\Projects\\RustFiles',
+      currentSnapshotVersion: 11,
+      navigateToPath,
+      refreshCurrentDirectory,
+    });
+
+    expect(store.getState().error).toBe('项目已不存在或已移动');
+    expect(refreshCurrentDirectory).toHaveBeenCalledTimes(1);
+    expect(navigateToPath).not.toHaveBeenCalled();
+    expect(store.getState().error).toBe('项目已不存在或已移动');
+  });
 });

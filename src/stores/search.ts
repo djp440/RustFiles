@@ -15,6 +15,7 @@ export type { SearchResultBatch } from '../api/tauri';
 
 const SEARCH_DEBOUNCE_MS = 180;
 const SEARCH_BATCH_SIZE = 12;
+const MISSING_LOCATION_ERROR = '项目已不存在或已移动';
 
 export interface SearchResultItem {
   batch: SearchResultBatch;
@@ -268,7 +269,7 @@ export function createSearchStore(): SearchStore {
     commit({
       visibleEntries: cloneEntries(batch.matches),
       resultBatches: batch.matches.length > 0 ? [batch] : [],
-      error: null,
+      error: state.error === MISSING_LOCATION_ERROR ? state.error : null,
     });
   }
 
@@ -316,7 +317,7 @@ export function createSearchStore(): SearchStore {
       taskId,
       resultBatches,
       visibleEntries: cloneEntries(rootBatch.matches),
-      error: null,
+      error: state.error === MISSING_LOCATION_ERROR ? state.error : null,
     });
 
     while (stack.length > 0) {
@@ -476,7 +477,7 @@ export function createSearchStore(): SearchStore {
 
     commit({
       status: 'queued',
-      error: null,
+      error: state.error === MISSING_LOCATION_ERROR ? state.error : null,
       visibleEntries: cloneEntries(batch.matches),
       resultBatches: batch.matches.length > 0 ? [batch] : [],
     });
