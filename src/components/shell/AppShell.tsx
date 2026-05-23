@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react';
 import {
+  createFolder,
+  deletePermanently,
+  deleteToRecycleBin,
   getDrives,
   getSidebarRoots,
   hasTauriRuntime,
   listDirectory,
+  openTerminal,
+  openWithDefaultApp,
+  renameItem,
+  showProperties,
   type DirectoryPage,
   type DriveInfo,
   type SidebarRoots,
@@ -228,6 +235,58 @@ function AppShell() {
     });
   }
 
+  async function handleCreateFolder(name: string): Promise<string | null> {
+    try {
+      const taskId = await createFolder(tab.path, name);
+      await loadDirectory(tab.path);
+      return taskId;
+    } catch {
+      return null;
+    }
+  }
+
+  async function handleRenameItem(path: string, newName: string): Promise<string | null> {
+    try {
+      const taskId = await renameItem(path, newName);
+      await loadDirectory(tab.path);
+      return taskId;
+    } catch {
+      return null;
+    }
+  }
+
+  async function handleDeleteToRecycleBin(path: string): Promise<string | null> {
+    try {
+      const taskId = await deleteToRecycleBin(path);
+      await loadDirectory(tab.path);
+      return taskId;
+    } catch {
+      return null;
+    }
+  }
+
+  async function handleDeletePermanently(path: string, confirmationToken: string): Promise<string | null> {
+    try {
+      const taskId = await deletePermanently(path, confirmationToken);
+      await loadDirectory(tab.path);
+      return taskId;
+    } catch {
+      return null;
+    }
+  }
+
+  async function handleOpenWithDefaultApp(path: string) {
+    return await openWithDefaultApp(path);
+  }
+
+  async function handleOpenTerminal(path: string) {
+    return await openTerminal(path);
+  }
+
+  async function handleShowProperties(path: string) {
+    return await showProperties(path);
+  }
+
   return (
     <div
       style={{
@@ -288,6 +347,13 @@ function AppShell() {
           onOpenEntry={handleOpenEntry}
           onOpenSearchResultLocation={handleOpenSearchResultLocation}
           onUserInteraction={() => void reportInteraction()}
+          onCreateFolder={handleCreateFolder}
+          onRenameItem={handleRenameItem}
+          onDeleteToRecycleBin={handleDeleteToRecycleBin}
+          onDeletePermanently={handleDeletePermanently}
+          onOpenWithDefaultApp={handleOpenWithDefaultApp}
+          onOpenTerminal={handleOpenTerminal}
+          onShowProperties={handleShowProperties}
         />
       </div>
     </div>

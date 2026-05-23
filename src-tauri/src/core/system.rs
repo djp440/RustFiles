@@ -1,5 +1,5 @@
 use std::ffi::c_void;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::core::error::{AppError, ErrorCode};
 use crate::core::types::{DriveInfo, DriveList, SidebarRoots};
@@ -207,4 +207,272 @@ pub fn get_drives() -> Result<DriveList, AppError> {
     }
 
     Ok(DriveList { drives })
+}
+
+// ========================================================================
+// 系统集成 — 回收站、默认应用打开、终端打开、属性
+// ========================================================================
+
+#[link(name = "shell32")]
+extern "system" {
+    fn SHFileOperationW(lpFileOp: *mut SHFILEOPSTRUCTW) -> i32;
+    fn ShellExecuteW(
+        hwnd: isize,
+        lpOperation: *const u16,
+        lpFile: *const u16,
+        lpParameters: *const u16,
+        lpDirectory: *const u16,
+        nShowCmd: i32,
+    ) -> isize;
+}
+
+#[link(name = "kernel32")]
+extern "system" {
+    fn CreateProcessW(
+        lpApplicationName: *const u16,
+        lpCommandLine: *mut u16,
+        lpProcessAttributes: *mut c_void,
+        lpThreadAttributes: *mut c_void,
+        bInheritHandles: i32,
+        dwCreationFlags: u32,
+        lpEnvironment: *mut c_void,
+        lpCurrentDirectory: *const u16,
+        lpStartupInfo: *mut c_void,
+        lpProcessInformation: *mut c_void,
+    ) -> i32;
+    fn CloseHandle(hObject: *mut c_void) -> i32;
+}
+
+const FO_DELETE: u32 = 3;
+const FOF_ALLOWUNDO: u16 = 0x0040;
+const FOF_NOCONFIRMATION: u16 = 0x0010;
+const FOF_SILENT: u16 = 0x0004;
+const FOF_NOERRORUI: u16 = 0x0400;
+const SW_SHOW: i32 = 5;
+const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+
+#[allow(non_snake_case)]
+#[repr(C)]
+struct SHFILEOPSTRUCTW {
+    hwnd: isize,
+    wFunc: u32,
+    pFrom: *const u16,
+    pTo: *const u16,
+    fFlags: u16,
+    fAnyOperationsAborted: i32,
+    hNameMappings: *mut c_void,
+    lpszProgressTitle: *const u16,
+}
+
+#[allow(non_snake_case)]
+#[repr(C)]
+struct STARTUPINFOW {
+    cb: u32,
+    lpReserved: *mut c_void,
+    lpDesktop: *mut u16,
+    lpTitle: *mut u16,
+    dwX: u32,
+    dwY: u32,
+    dwXSize: u32,
+    dwYSize: u32,
+    dwXCountChars: u32,
+    dwYCountChars: u32,
+    dwFillAttribute: u32,
+    dwFlags: u32,
+    wShowWindow: u16,
+    cbReserved2: u16,
+    lpReserved2: *mut u8,
+    hStdInput: *mut c_void,
+    hStdOutput: *mut c_void,
+    hStdError: *mut c_void,
+}
+
+#[allow(non_snake_case)]
+#[repr(C)]
+struct PROCESS_INFORMATION {
+    hProcess: *mut c_void,
+    hThread: *mut c_void,
+    dwProcessId: u32,
+    dwThreadId: u32,
+}
+
+fn path_exists(path: &str) -> bool {
+    Path::new(path).exists()
+}
+
+fn to_wide(path: &str) -> Vec<u16> {
+    path.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+fn to_wide_double_null(path: &str) -> Vec<u16> {
+    path.encode_utf16()
+        .chain(std::iter::once(0))
+        .chain(std::iter::once(0))
+        .collect()
+}
+
+pub fn delete_to_recycle_bin(path: &str) -> Result<(), AppError> {
+    if !path_exists(path) {
+        return Err(AppError::new(
+            ErrorCode::PathNotFound,
+            format!("路径不存在: {}", path),
+        ));
+    }
+
+    let wide = to_wide_double_null(path);
+
+    let mut op = SHFILEOPSTRUCTW {
+        hwnd: 0,
+        wFunc: FO_DELETE,
+        pFrom: wide.as_ptr(),
+        pTo: std::ptr::null(),
+        fFlags: FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI,
+        fAnyOperationsAborted: 0,
+        hNameMappings: std::ptr::null_mut(),
+        lpszProgressTitle: std::ptr::null(),
+    };
+
+    let result = unsafe { SHFileOperationW(&mut op) };
+    if result != 0 {
+        return Err(AppError::new(
+            ErrorCode::RecycleBinUnavailable,
+            format!("回收站操作失败 (Win32 error {})", result),
+        ));
+    }
+
+    Ok(())
+}
+
+pub fn open_with_default_app(path: &str) -> Result<(), AppError> {
+    if !path_exists(path) {
+        return Err(AppError::new(
+            ErrorCode::PathNotFound,
+            format!("路径不存在: {}", path),
+        ));
+    }
+
+    let wide_path = to_wide(path);
+    let verb = to_wide("open");
+
+    let result = unsafe {
+        ShellExecuteW(
+            0,
+            verb.as_ptr(),
+            wide_path.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOW,
+        )
+    };
+
+    if result as isize <= 32 {
+        return Err(AppError::new(
+            ErrorCode::DefaultAppOpenFailed,
+            format!("默认应用打开失败 (ShellExecute returned {})", result),
+        ));
+    }
+
+    Ok(())
+}
+
+pub fn open_terminal(path: &str) -> Result<(), AppError> {
+    if !path_exists(path) {
+        return Err(AppError::new(
+            ErrorCode::PathNotFound,
+            format!("路径不存在: {}", path),
+        ));
+    }
+
+    let wide_dir = to_wide(path);
+
+    let mut si = STARTUPINFOW {
+        cb: std::mem::size_of::<STARTUPINFOW>() as u32,
+        lpReserved: std::ptr::null_mut(),
+        lpDesktop: std::ptr::null_mut(),
+        lpTitle: std::ptr::null_mut(),
+        dwX: 0,
+        dwY: 0,
+        dwXSize: 0,
+        dwYSize: 0,
+        dwXCountChars: 0,
+        dwYCountChars: 0,
+        dwFillAttribute: 0,
+        dwFlags: 0,
+        wShowWindow: 0,
+        cbReserved2: 0,
+        lpReserved2: std::ptr::null_mut(),
+        hStdInput: std::ptr::null_mut(),
+        hStdOutput: std::ptr::null_mut(),
+        hStdError: std::ptr::null_mut(),
+    };
+
+    let mut pi = PROCESS_INFORMATION {
+        hProcess: std::ptr::null_mut(),
+        hThread: std::ptr::null_mut(),
+        dwProcessId: 0,
+        dwThreadId: 0,
+    };
+
+    let mut cmd_line: Vec<u16> = "cmd.exe\0".encode_utf16().collect();
+
+    let success = unsafe {
+        CreateProcessW(
+            std::ptr::null(),
+            cmd_line.as_mut_ptr(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            0,
+            CREATE_NEW_CONSOLE,
+            std::ptr::null_mut(),
+            wide_dir.as_ptr(),
+            &mut si as *mut _ as *mut c_void,
+            &mut pi as *mut _ as *mut c_void,
+        )
+    };
+
+    if success == 0 {
+        return Err(AppError::new(
+            ErrorCode::TerminalUnavailable,
+            "无法打开终端窗口",
+        ));
+    }
+
+    unsafe {
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    }
+
+    Ok(())
+}
+
+pub fn show_properties(path: &str) -> Result<(), AppError> {
+    if !path_exists(path) {
+        return Err(AppError::new(
+            ErrorCode::PathNotFound,
+            format!("路径不存在: {}", path),
+        ));
+    }
+
+    let wide_path = to_wide(path);
+    let verb = to_wide("properties");
+
+    let result = unsafe {
+        ShellExecuteW(
+            0,
+            verb.as_ptr(),
+            wide_path.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOW,
+        )
+    };
+
+    if result as isize <= 32 {
+        return Err(AppError::new(
+            ErrorCode::PropertiesOpenFailed,
+            format!("属性窗口打开失败 (ShellExecute returned {})", result),
+        ));
+    }
+
+    Ok(())
 }

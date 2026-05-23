@@ -1,9 +1,10 @@
 use crate::core::error::AppError;
-use crate::core::search::{SearchRequest, TaskId};
 use crate::core::runtime::RuntimeGuard;
 use crate::core::scheduler::{
     summarize_interaction_state, summarize_viewport_state, SchedulerReportAck, SchedulerSignal,
 };
+use crate::core::search::{SearchRequest, TaskId};
+use crate::core::tasks;
 use crate::core::types::{
     DirectoryPage, DriveList, FilterKind, Settings, SidebarRoots, SortKey, TaskStatus,
 };
@@ -60,36 +61,40 @@ pub async fn cancel_task(task_id: TaskId) -> Result<TaskStatus, AppError> {
 // ============================================================
 
 #[tauri::command]
-pub async fn create_folder() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn create_folder(parent_path: String, name: String) -> Result<TaskId, AppError> {
+    let test_root = RuntimeGuard::test_root();
+    tasks::execute_create_folder(&parent_path, &name, test_root.as_deref())
 }
 
 #[tauri::command]
-pub async fn rename_item() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn rename_item(path: String, new_name: String) -> Result<TaskId, AppError> {
+    let test_root = RuntimeGuard::test_root();
+    tasks::execute_rename_item(&path, &new_name, test_root.as_deref())
 }
 
 #[tauri::command]
-pub async fn delete_to_recycle_bin() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn delete_to_recycle_bin(path: String) -> Result<TaskId, AppError> {
+    let test_root = RuntimeGuard::test_root();
+    tasks::execute_delete_to_recycle_bin(&path, test_root.as_deref())
 }
 
 /// 危险 command：永久删除，先经过测试模式 guard，再检查确认令牌
 #[tauri::command]
-pub async fn delete_permanently(confirmation_token: Option<String>) -> Result<(), AppError> {
+pub async fn delete_permanently(path: String, confirmation_token: Option<String>) -> Result<TaskId, AppError> {
     RuntimeGuard::guard_dangerous_operation()?;
     RuntimeGuard::check_confirmation(confirmation_token)?;
-    Err(AppError::not_implemented())
+    let test_root = RuntimeGuard::test_root();
+    tasks::execute_delete_permanently(&path, test_root.as_deref())
 }
 
 #[tauri::command]
-pub async fn copy_items() -> Result<(), AppError> {
+pub async fn copy_items() -> Result<TaskId, AppError> {
     Err(AppError::not_implemented())
 }
 
 /// 危险 command：移动文件，先经过测试模式 guard，再检查确认令牌
 #[tauri::command]
-pub async fn move_items(confirmation_token: Option<String>) -> Result<(), AppError> {
+pub async fn move_items(confirmation_token: Option<String>) -> Result<TaskId, AppError> {
     RuntimeGuard::guard_dangerous_operation()?;
     RuntimeGuard::check_confirmation(confirmation_token)?;
     Err(AppError::not_implemented())
@@ -127,8 +132,19 @@ pub async fn resolve_conflict(confirmation_token: Option<String>) -> Result<(), 
 }
 
 #[tauri::command]
-pub async fn get_task_status() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn get_task_status(task_id: TaskId) -> Result<TaskStatus, AppError> {
+    // 先查搜索任务
+    if let Some(status) = tasks::get_search_task_status(&task_id) {
+        return Ok(status);
+    }
+    // 再查文件操作任务
+    if let Some(task) = tasks::get_file_op_task_status(task_id.as_str()) {
+        return Ok(task.status);
+    }
+    Err(AppError::new(
+        crate::core::error::ErrorCode::InternalError,
+        format!("找不到任务: {}", task_id.as_str()),
+    ))
 }
 
 // ============================================================
@@ -179,16 +195,16 @@ pub async fn update_settings(settings: Settings) -> Result<Settings, AppError> {
 // ============================================================
 
 #[tauri::command]
-pub async fn open_with_default_app() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn open_with_default_app(path: String) -> Result<(), AppError> {
+    crate::core::system::open_with_default_app(&path)
 }
 
 #[tauri::command]
-pub async fn open_terminal() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn open_terminal(path: String) -> Result<(), AppError> {
+    crate::core::system::open_terminal(&path)
 }
 
 #[tauri::command]
-pub async fn show_properties() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn show_properties(path: String) -> Result<(), AppError> {
+    crate::core::system::show_properties(&path)
 }

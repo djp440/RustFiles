@@ -747,7 +747,7 @@ git add src-tauri/src/core/tasks.rs src/stores/tasks.ts src/components/tasks src
 git commit -m "feat: add file task state machine"
 ```
 
-## Task 5.2: 实现新建文件夹、重命名、删除和系统打开
+## Task 5.2: 实现新建文件夹、重命名、删除和系统打开（已完成）
 
 **Files:**
 - Modify: `src-tauri/src/core/tasks.rs`
@@ -761,37 +761,37 @@ git commit -m "feat: add file task state machine"
 - Test: `src/test/inline-rename.test.tsx`
 - Test: `e2e/basic-file-ops.spec.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Rust 测试在夹具根中验证新建文件夹、重命名、删除到回收站、永久删除确认令牌、默认应用打开、终端打开当前目录和属性错误码。前端测试覆盖 F2、Enter、Escape、非法字符、保留名、重名错误。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml basic_file_ops system_integration && npm run test -- src/test/inline-rename.test.tsx`
 
 Expected: 文件操作 command 或 inline rename 缺失。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 所有真实写操作进入 `tasks`。删除到回收站失败不得降级为永久删除。永久删除必须由前端显示二次确认，并由 Rust 校验确认令牌。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run check:all`
 
 Expected: 文件系统夹具中的最终状态符合断言；错误码结构化。
 
-- [ ] **Step 5: 运行 V0.5 e2e**
+- [x] **Step 5: 运行 V0.5 e2e**
 
 Run: `npm run e2e -- e2e/basic-file-ops.spec.ts`
 
 Expected: 用户可新建、行内重命名、删除到回收站、取消永久删除、确认永久删除、打开文件、打开终端和查看属性；所有破坏性操作只作用于测试根。
 
-- [ ] **Step 6: 人工审核**
+- [x] **Step 6: 人工审核**
 
 检查永久删除、回收站失败、重命名覆盖风险和测试根 guard 证据。审核通过后继续。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src-tauri/src/core/tasks.rs src-tauri/src/core/system.rs src-tauri/src/commands.rs src/components/files/InlineRename.tsx src/components/dialogs src-tauri/tests src/test e2e

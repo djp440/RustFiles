@@ -1,10 +1,13 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use crate::core::error::{AppError, ErrorCode};
+use crate::core::path_safety;
 use crate::core::search::{create_task_id, SearchRequest, SearchResultBatch, SearchTaskSnapshot, TaskId};
-use crate::core::types::TaskStatus;
+use crate::core::system;
+use crate::core::types::{FileTask, TaskStatus};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TaskSummary {
@@ -229,4 +232,228 @@ pub fn is_search_cancel_requested(task_id: &TaskId) -> bool {
 fn get_handle(task_id: &TaskId) -> Option<Arc<SearchTaskHandle>> {
     let registry = registry().lock().ok()?;
     registry.get(task_id.as_str()).cloned()
+}
+
+// ========================================================================
+// 文件操作任务注册表
+// ========================================================================
+
+static FILE_OP_TASKS: OnceLock<Mutex<HashMap<String, FileTask>>> = OnceLock::new();
+
+fn file_op_registry() -> &'static Mutex<HashMap<String, FileTask>> {
+    FILE_OP_TASKS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+pub(crate) fn create_file_op_id() -> TaskId {
+    static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+    let seq = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    TaskId(format!("fileop-{}-{}", ts, seq))
+}
+
+fn set_file_op_task_status(task_id: &TaskId, status: TaskStatus) {
+    if let Ok(mut registry) = file_op_registry().lock() {
+        if let Some(task) = registry.get_mut(task_id.as_str()) {
+            task.status = status;
+        }
+    }
+}
+
+fn set_file_op_task_failed(task_id: &TaskId, error: &AppError) {
+    if let Ok(mut registry) = file_op_registry().lock() {
+        if let Some(task) = registry.get_mut(task_id.as_str()) {
+            task.status = TaskStatus::Failed;
+            task.error_message = Some(error.message.clone());
+        }
+    }
+}
+
+pub fn get_file_op_task_status(task_id: &str) -> Option<FileTask> {
+    file_op_registry().lock().ok()?.get(task_id).cloned()
+}
+
+pub fn execute_create_folder(
+    parent_path: &str,
+    name: &str,
+    test_root: Option<&str>,
+) -> Result<TaskId, AppError> {
+    path_safety::validate_child_name(name)?;
+
+    let target_path = Path::new(parent_path).join(name);
+    let target_str = target_path.to_string_lossy().to_string();
+    path_safety::guard_destructive_path(&target_str, test_root)?;
+
+    let task_id = create_file_op_id();
+    let task = FileTask {
+        id: task_id.0.clone(),
+        source: parent_path.to_string(),
+        target: Some(target_str.clone()),
+        status: TaskStatus::Queued,
+        progress_current: 0,
+        progress_total: 0,
+        error_message: None,
+    };
+    file_op_registry()
+        .lock()
+        .expect("file op registry poisoned")
+        .insert(task_id.0.clone(), task);
+    set_file_op_task_status(&task_id, TaskStatus::Validating);
+    set_file_op_task_status(&task_id, TaskStatus::Running);
+
+    match std::fs::create_dir(&target_path) {
+        Ok(_) => {
+            set_file_op_task_status(&task_id, TaskStatus::Completed);
+            Ok(task_id)
+        }
+        Err(e) => {
+            let app_err = AppError::new(
+                ErrorCode::PathNotFound,
+                format!("创建文件夹失败: {}", e),
+            );
+            set_file_op_task_failed(&task_id, &app_err);
+            Err(app_err)
+        }
+    }
+}
+
+pub fn execute_rename_item(
+    path: &str,
+    new_name: &str,
+    test_root: Option<&str>,
+) -> Result<TaskId, AppError> {
+    path_safety::validate_child_name(new_name)?;
+
+    let old_path = Path::new(path);
+    let parent = old_path.parent().ok_or_else(|| {
+        AppError::new(ErrorCode::PathNotFound, "无法获取父目录路径")
+    })?;
+    let new_path = parent.join(new_name);
+    let new_path_str = new_path.to_string_lossy().to_string();
+
+    path_safety::guard_destructive_path(path, test_root)?;
+    path_safety::guard_destructive_path(&new_path_str, test_root)?;
+
+    let task_id = create_file_op_id();
+    let task = FileTask {
+        id: task_id.0.clone(),
+        source: path.to_string(),
+        target: Some(new_path_str.clone()),
+        status: TaskStatus::Queued,
+        progress_current: 0,
+        progress_total: 0,
+        error_message: None,
+    };
+    file_op_registry()
+        .lock()
+        .expect("file op registry poisoned")
+        .insert(task_id.0.clone(), task);
+    set_file_op_task_status(&task_id, TaskStatus::Validating);
+    set_file_op_task_status(&task_id, TaskStatus::Running);
+
+    match std::fs::rename(path, &new_path) {
+        Ok(_) => {
+            set_file_op_task_status(&task_id, TaskStatus::Completed);
+            Ok(task_id)
+        }
+        Err(e) => {
+            let code = if e.kind() == std::io::ErrorKind::NotFound {
+                ErrorCode::PathNotFound
+            } else if e.kind() == std::io::ErrorKind::PermissionDenied {
+                ErrorCode::PermissionDenied
+            } else {
+                ErrorCode::InternalError
+            };
+            let app_err = AppError::new(code, format!("重命名失败: {}", e));
+            set_file_op_task_failed(&task_id, &app_err);
+            Err(app_err)
+        }
+    }
+}
+
+pub fn execute_delete_to_recycle_bin(
+    path: &str,
+    test_root: Option<&str>,
+) -> Result<TaskId, AppError> {
+    path_safety::guard_destructive_path(path, test_root)?;
+
+    let task_id = create_file_op_id();
+    let task = FileTask {
+        id: task_id.0.clone(),
+        source: path.to_string(),
+        target: None,
+        status: TaskStatus::Queued,
+        progress_current: 0,
+        progress_total: 0,
+        error_message: None,
+    };
+    file_op_registry()
+        .lock()
+        .expect("file op registry poisoned")
+        .insert(task_id.0.clone(), task);
+    set_file_op_task_status(&task_id, TaskStatus::Validating);
+    set_file_op_task_status(&task_id, TaskStatus::Running);
+
+    match system::delete_to_recycle_bin(path) {
+        Ok(_) => {
+            set_file_op_task_status(&task_id, TaskStatus::Completed);
+            Ok(task_id)
+        }
+        Err(app_err) => {
+            set_file_op_task_failed(&task_id, &app_err);
+            Err(app_err)
+        }
+    }
+}
+
+pub fn execute_delete_permanently(
+    path: &str,
+    test_root: Option<&str>,
+) -> Result<TaskId, AppError> {
+    path_safety::guard_destructive_path(path, test_root)?;
+
+    let task_id = create_file_op_id();
+    let task = FileTask {
+        id: task_id.0.clone(),
+        source: path.to_string(),
+        target: None,
+        status: TaskStatus::Queued,
+        progress_current: 0,
+        progress_total: 0,
+        error_message: None,
+    };
+    file_op_registry()
+        .lock()
+        .expect("file op registry poisoned")
+        .insert(task_id.0.clone(), task);
+    set_file_op_task_status(&task_id, TaskStatus::Validating);
+    set_file_op_task_status(&task_id, TaskStatus::Running);
+
+    let p = Path::new(path);
+    let result = if p.is_dir() {
+        std::fs::remove_dir_all(p)
+    } else {
+        std::fs::remove_file(p)
+    };
+
+    match result {
+        Ok(_) => {
+            set_file_op_task_status(&task_id, TaskStatus::Completed);
+            Ok(task_id)
+        }
+        Err(e) => {
+            let code = if e.kind() == std::io::ErrorKind::NotFound {
+                ErrorCode::PathNotFound
+            } else if e.kind() == std::io::ErrorKind::PermissionDenied {
+                ErrorCode::PermissionDenied
+            } else {
+                ErrorCode::InternalError
+            };
+            let app_err = AppError::new(code, format!("永久删除失败: {}", e));
+            set_file_op_task_failed(&task_id, &app_err);
+            Err(app_err)
+        }
+    }
 }

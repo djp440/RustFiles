@@ -721,3 +721,106 @@ export async function updateSettings(settings: Settings): Promise<Settings> {
     return settings;
   }
 }
+
+export type SystemActionKind = 'open' | 'terminal' | 'properties';
+
+export interface SystemActionFeedback {
+  kind: SystemActionKind;
+  path: string;
+  preview: boolean;
+  error: string | null;
+}
+
+export async function createFolder(parentPath: string, name: string): Promise<string> {
+  if (!hasTauriRuntime()) {
+    return `preview-create-${Date.now()}`;
+  }
+
+  return await invoke<string>('create_folder', {
+    parentPath,
+    name,
+  });
+}
+
+export async function renameItem(path: string, newName: string): Promise<string> {
+  if (!hasTauriRuntime()) {
+    return `preview-rename-${Date.now()}`;
+  }
+
+  return await invoke<string>('rename_item', {
+    path,
+    newName,
+  });
+}
+
+export async function deleteToRecycleBin(path: string): Promise<string> {
+  if (!hasTauriRuntime()) {
+    return `preview-recycle-${Date.now()}`;
+  }
+
+  return await invoke<string>('delete_to_recycle_bin', { path });
+}
+
+export async function deletePermanently(path: string, confirmationToken: string): Promise<string> {
+  if (!hasTauriRuntime()) {
+    return `preview-delete-${Date.now()}`;
+  }
+
+  return await invoke<string>('delete_permanently', {
+    path,
+    confirmationToken,
+  });
+}
+
+export async function openWithDefaultApp(path: string): Promise<SystemActionFeedback> {
+  if (!hasTauriRuntime()) {
+    return { kind: 'open', path, preview: true, error: '桌面运行时环境不可用，浏览器预览模式下无法打开文件。' };
+  }
+
+  try {
+    await invoke('open_with_default_app', { path });
+    return { kind: 'open', path, preview: false, error: null };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : '打开文件失败';
+    return { kind: 'open', path, preview: false, error: message };
+  }
+}
+
+export async function openTerminal(path: string): Promise<SystemActionFeedback> {
+  if (!hasTauriRuntime()) {
+    return { kind: 'terminal', path, preview: true, error: '桌面运行时环境不可用，浏览器预览模式下无法打开终端。' };
+  }
+
+  try {
+    await invoke('open_terminal', { path });
+    return { kind: 'terminal', path, preview: false, error: null };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : '打开终端失败';
+    return { kind: 'terminal', path, preview: false, error: message };
+  }
+}
+
+export async function showProperties(path: string): Promise<SystemActionFeedback> {
+  if (!hasTauriRuntime()) {
+    return { kind: 'properties', path, preview: true, error: '桌面运行时环境不可用，浏览器预览模式下无法显示属性。' };
+  }
+
+  try {
+    await invoke('show_properties', { path });
+    return { kind: 'properties', path, preview: false, error: null };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : '显示属性失败';
+    return { kind: 'properties', path, preview: false, error: message };
+  }
+}
+
+export async function getTaskStatus(taskId: string): Promise<TaskStatus> {
+  if (!hasTauriRuntime()) {
+    if (taskId.startsWith('preview-')) {
+      return 'completed';
+    }
+    return 'completed';
+  }
+
+  return await invoke<TaskStatus>('get_task_status', { taskId });
+}
