@@ -58,3 +58,4 @@ Desktop.ini
 .superpowers/
 docs/cdd-frontend-e2e-review/*
 .playwright-mcp/*
+/src-tauri/.tmp/*
