@@ -814,6 +814,38 @@ export async function showProperties(path: string): Promise<SystemActionFeedback
   }
 }
 
+export async function createClipboardOperation(
+  sourcePaths: string[],
+  opType: 'copy' | 'cut',
+  sourceTabId: string,
+): Promise<string> {
+  if (!hasTauriRuntime()) {
+    return `preview-clip-${Date.now()}`;
+  }
+
+  return await invoke<string>('create_clipboard_operation', {
+    sourcePaths,
+    opType,
+    sourceTabId,
+  });
+}
+
+export async function pasteClipboardOperation(
+  operationId: string,
+  targetDir: string,
+  confirmationToken?: string,
+): Promise<string> {
+  if (!hasTauriRuntime()) {
+    return `preview-paste-${Date.now()}`;
+  }
+
+  return await invoke<string>('paste_clipboard_operation', {
+    operationId,
+    targetDir,
+    confirmationToken: confirmationToken ?? null,
+  });
+}
+
 export async function getTaskStatus(taskId: string): Promise<TaskStatus> {
   if (!hasTauriRuntime()) {
     if (taskId.startsWith('preview-')) {

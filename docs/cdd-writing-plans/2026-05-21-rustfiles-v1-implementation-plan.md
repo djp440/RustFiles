@@ -804,26 +804,26 @@ git commit -m "feat: add basic file operations"
 - Create: `src-tauri/src/core/clipboard.rs`
 - Modify: `src-tauri/src/core/tasks.rs`
 - Modify: `src-tauri/src/commands.rs`
-- Modify: `src/stores/selection.ts`
+- Create: `src/stores/selection.ts`
 - Test: `src-tauri/tests/clipboard_ops.rs`
 - Test: `src/test/clipboard-ui.test.ts`
 - Test: `e2e/copy-paste.spec.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Rust 测试验证 `create_clipboard_operation` 保存源路径、类型、来源标签、创建时间和路径安全分类；`paste_clipboard_operation` 只接收 operation id 和目标目录；源消失时返回结构化错误。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml clipboard_ops && npm run test -- src/test/clipboard-ui.test.ts`
 
 Expected: clipboard 模块或剪切视觉态缺失。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 React 可以显示 cut-pending；Rust 持有真正可执行的 pending operation。粘贴时 Rust 重新校验源、目标、reparse point 和测试根。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run check:all`
 
@@ -836,11 +836,6 @@ Run: `npm run e2e -- e2e/copy-paste.spec.ts`
 Expected: Ctrl+C/Ctrl+X/Ctrl+V 可复制和移动夹具文件；剪切项显示降低不透明度；源消失时显示可恢复错误。
 
 - [ ] **Step 6: Commit**
-
-```bash
-git add src-tauri/src/core/clipboard.rs src-tauri/src/core/tasks.rs src-tauri/src/commands.rs src/stores src-tauri/tests src/test e2e
-git commit -m "feat: add app clipboard operations"
-```
 
 ## Task 6.2: 实现拖拽移动/复制与进度反馈
 

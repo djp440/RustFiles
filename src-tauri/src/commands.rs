@@ -1,4 +1,5 @@
-use crate::core::error::AppError;
+use crate::core::clipboard;
+use crate::core::error::{AppError, ErrorCode};
 use crate::core::runtime::RuntimeGuard;
 use crate::core::scheduler::{
     summarize_interaction_state, summarize_viewport_state, SchedulerReportAck, SchedulerSignal,
@@ -88,26 +89,88 @@ pub async fn delete_permanently(path: String, confirmation_token: Option<String>
 }
 
 #[tauri::command]
-pub async fn copy_items() -> Result<TaskId, AppError> {
-    Err(AppError::not_implemented())
+pub async fn copy_items(source_paths: Vec<String>, target_dir: String) -> Result<TaskId, AppError> {
+    let op_id = clipboard::create_operation(source_paths, "copy", "clipboard");
+    paste_clipboard_operation(op_id, target_dir, None).await
 }
 
-/// 危险 command：移动文件，先经过测试模式 guard，再检查确认令牌
 #[tauri::command]
-pub async fn move_items(confirmation_token: Option<String>) -> Result<TaskId, AppError> {
+pub async fn move_items(
+    source_paths: Vec<String>,
+    target_dir: String,
+    confirmation_token: Option<String>,
+) -> Result<TaskId, AppError> {
     RuntimeGuard::guard_dangerous_operation()?;
     RuntimeGuard::check_confirmation(confirmation_token)?;
-    Err(AppError::not_implemented())
+    let op_id = clipboard::create_operation(source_paths, "cut", "clipboard");
+    paste_clipboard_operation(op_id, target_dir, Some("pre-confirmed".to_string())).await
 }
 
 #[tauri::command]
-pub async fn create_clipboard_operation() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn create_clipboard_operation(
+    source_paths: Vec<String>,
+    op_type: String,
+    source_tab_id: String,
+) -> Result<String, AppError> {
+    RuntimeGuard::guard_dangerous_operation()?;
+    let test_root = RuntimeGuard::test_root();
+    for path in &source_paths {
+        crate::core::path_safety::guard_destructive_path(path, test_root.as_deref())?;
+    }
+    let op_id = clipboard::create_operation(source_paths, &op_type, &source_tab_id);
+    Ok(op_id)
 }
 
 #[tauri::command]
-pub async fn paste_clipboard_operation() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn paste_clipboard_operation(
+    operation_id: String,
+    target_dir: String,
+    confirmation_token: Option<String>,
+) -> Result<TaskId, AppError> {
+    RuntimeGuard::guard_dangerous_operation()?;
+
+    let op = clipboard::get_operation(&operation_id).ok_or_else(|| {
+        AppError::new(ErrorCode::PathNotFound, "剪贴板操作不存在或已过期")
+    })?;
+
+    if op.status != clipboard::ClipOpStatus::Active {
+        return Err(AppError::new(
+            ErrorCode::InternalError,
+            "此剪贴板操作已被使用或已失效，不能再次粘贴",
+        ));
+    }
+
+    let test_root = RuntimeGuard::test_root();
+
+    // 对 cut 操作需要确认令牌
+    if op.op_type == clipboard::ClipOpType::Cut {
+        RuntimeGuard::check_confirmation(confirmation_token)?;
+    }
+
+    // 校验每个源路径是否存在
+    for src in &op.source_paths {
+        if !std::path::Path::new(src).exists() {
+            return Err(AppError::new(
+                ErrorCode::PathNotFound,
+                format!("源路径不存在: {}", src),
+            ));
+        }
+    }
+
+    // 对目标路径进行安全校验
+    crate::core::path_safety::guard_destructive_path(&target_dir, test_root.as_deref())?;
+
+    let task_id = match op.op_type {
+        clipboard::ClipOpType::Copy => {
+            tasks::execute_copy_items(&op.source_paths, &target_dir, test_root.as_deref())?
+        }
+        clipboard::ClipOpType::Cut => {
+            tasks::execute_move_items(&op.source_paths, &target_dir, test_root.as_deref())?
+        }
+    };
+
+    clipboard::mark_pasted(&operation_id);
+    Ok(task_id)
 }
 
 #[tauri::command]

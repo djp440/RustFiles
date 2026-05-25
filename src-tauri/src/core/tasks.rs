@@ -408,6 +408,170 @@ pub fn execute_delete_to_recycle_bin(
     }
 }
 
+fn copy_single(source: &Path, target_dir: &Path) -> Result<(), AppError> {
+    let file_name = source.file_name().ok_or_else(|| {
+        AppError::new(ErrorCode::InternalError, "无法获取源文件名")
+    })?;
+    let dest = target_dir.join(file_name);
+
+    if dest.exists() {
+        // TODO: Task 7.1 will replace this with conflict dialog
+        return Err(AppError::new(
+            ErrorCode::TargetAlreadyExists,
+            format!("目标已存在: {}", dest.display()),
+        ));
+    }
+
+    if source.is_dir() {
+        std::fs::create_dir_all(&dest).map_err(|e| {
+            AppError::new(ErrorCode::InternalError, format!("创建目标目录失败: {}", e))
+        })?;
+        for entry in std::fs::read_dir(source).map_err(|e| {
+            AppError::new(ErrorCode::InternalError, format!("读取源目录失败: {}", e))
+        })? {
+            let entry = entry.map_err(|e| {
+                AppError::new(ErrorCode::InternalError, format!("读取目录项失败: {}", e))
+            })?;
+            copy_single(&entry.path(), &dest)?;
+        }
+    } else {
+        std::fs::copy(source, &dest).map_err(|e| {
+            AppError::new(ErrorCode::InternalError, format!("复制文件失败: {}", e))
+        })?;
+    }
+
+    Ok(())
+}
+
+/// 复制多个源路径到目标目录。
+/// 逐项复制，收集成功和失败路径。
+/// 全部成功 → Completed，部分失败 → PartiallyCompleted，
+/// 全部失败 → Failed。
+pub fn execute_copy_items(
+    sources: &[String],
+    target_dir: &str,
+    test_root: Option<&str>,
+) -> Result<TaskId, AppError> {
+    let target_path = Path::new(target_dir);
+
+    // 先校验所有路径
+    for src in sources {
+        path_safety::guard_destructive_path(src, test_root)?;
+    }
+    path_safety::guard_destructive_path(target_dir, test_root)?;
+
+    let task_id = create_file_op_id();
+    let source_display = sources.first().cloned().unwrap_or_else(|| "multiple".to_string());
+    let total = sources.len() as u64;
+    let task = FileTask {
+        id: task_id.0.clone(),
+        source: source_display,
+        target: Some(target_dir.to_string()),
+        status: TaskStatus::Queued,
+        progress_current: 0,
+        progress_total: total,
+        error_message: None,
+    };
+    file_op_registry()
+        .lock()
+        .expect("file op registry poisoned")
+        .insert(task_id.0.clone(), task);
+    set_file_op_task_status(&task_id, TaskStatus::Validating);
+    set_file_op_task_status(&task_id, TaskStatus::Running);
+
+    let mut completed: Vec<String> = Vec::new();
+    let mut incomplete: Vec<String> = Vec::new();
+    let mut first_error_code: Option<ErrorCode> = None;
+
+    for src in sources {
+        let src_path = Path::new(src);
+        if !src_path.exists() {
+            incomplete.push(src.clone());
+            first_error_code.get_or_insert(ErrorCode::PathNotFound);
+            continue;
+        }
+        match copy_single(src_path, target_path) {
+            Ok(_) => {
+                completed.push(src.clone());
+            }
+            Err(e) => {
+                first_error_code.get_or_insert(e.code);
+                incomplete.push(src.clone());
+            }
+        }
+    }
+
+    if completed.is_empty() && !incomplete.is_empty() {
+        let err_code = first_error_code.unwrap_or(ErrorCode::PathNotFound);
+        let err = AppError::new(err_code, "所有源路径复制失败");
+        set_file_op_task_failed(&task_id, &err);
+        return Err(err);
+    }
+
+    if incomplete.is_empty() {
+        set_file_op_task_status(&task_id, TaskStatus::Completed);
+    } else {
+        set_file_op_task_status(&task_id, TaskStatus::PartiallyCompleted);
+    }
+
+    // 更新进度
+    let done = completed.len() as u64;
+    if let Ok(mut registry) = file_op_registry().lock() {
+        if let Some(task) = registry.get_mut(task_id.as_str()) {
+            task.progress_current = done;
+        }
+    }
+
+    Ok(task_id)
+}
+
+/// 移动多个源路径到目标目录。
+/// 委托 execute_copy_items 完成复制，复制全部成功后逐项删除源文件。
+/// 部分复制成功时不删除源文件（保证数据安全），部分源文件删除失败时标记为 PartiallyCompleted。
+pub fn execute_move_items(
+    sources: &[String],
+    target_dir: &str,
+    test_root: Option<&str>,
+) -> Result<TaskId, AppError> {
+    let copy_result = execute_copy_items(sources, target_dir, test_root)?;
+
+    let status = file_op_registry()
+        .lock()
+        .map_err(|_| AppError::new(ErrorCode::InternalError, "文件操作注册表锁已损坏"))?
+        .get(copy_result.as_str())
+        .map(|t| t.status.clone())
+        .unwrap_or(TaskStatus::Failed);
+
+    if status == TaskStatus::Completed {
+        let mut delete_failures: Vec<String> = Vec::new();
+        for src in sources {
+            let path = Path::new(src);
+            if path.is_dir() {
+                if let Err(_) = std::fs::remove_dir_all(path) {
+                    delete_failures.push(src.clone());
+                }
+            } else {
+                if let Err(_) = std::fs::remove_file(path) {
+                    delete_failures.push(src.clone());
+                }
+            }
+        }
+        if !delete_failures.is_empty() {
+            set_file_op_task_status(&copy_result, TaskStatus::PartiallyCompleted);
+            if let Ok(mut reg) = file_op_registry().lock() {
+                if let Some(task) = reg.get_mut(copy_result.as_str()) {
+                    task.error_message = Some(format!(
+                        "复制成功但部分源文件删除失败（{} 项）",
+                        delete_failures.len()
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(copy_result)
+}
+
 pub fn execute_delete_permanently(
     path: &str,
     test_root: Option<&str>,
