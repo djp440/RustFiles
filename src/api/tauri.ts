@@ -856,3 +856,37 @@ export async function getTaskStatus(taskId: string): Promise<TaskStatus> {
 
   return await invoke<TaskStatus>('get_task_status', { taskId });
 }
+
+export async function createDragOperation(
+  sourcePaths: string[],
+  dragType: 'move' | 'copy',
+  sourceTabId: string,
+): Promise<string> {
+  if (!hasTauriRuntime()) {
+    return `preview-drag-${Date.now()}`;
+  }
+
+  return await invoke<string>('create_drag_operation', {
+    sourcePaths,
+    dragType,
+    sourceTabId,
+  });
+}
+
+export async function dropDragOperation(
+  operationId: string,
+  targetDir: string,
+  requestedType?: 'move' | 'copy',
+  confirmationToken?: string,
+): Promise<string> {
+  if (!hasTauriRuntime()) {
+    return `preview-drop-${Date.now()}`;
+  }
+
+  return await invoke<string>('drop_drag_operation', {
+    operationId,
+    targetDir,
+    requestedType: requestedType ?? null,
+    confirmationToken: confirmationToken ?? null,
+  });
+}

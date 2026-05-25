@@ -11,3 +11,4 @@ pub mod snapshot;
 pub mod system;
 pub mod types;
 pub mod clipboard;
+pub mod drag;

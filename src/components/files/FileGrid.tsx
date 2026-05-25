@@ -160,6 +160,14 @@ function FileGrid({
                     key={entry.path}
                     role="listitem"
                     aria-label={entry.name}
+                    draggable
+                    onDragStart={(e) => {
+                      const paths = selectedPaths.has(entry.path) && selectedPaths.size > 0
+                        ? [...selectedPaths]
+                        : [entry.path];
+                      e.dataTransfer.effectAllowed = 'copyMove';
+                      e.dataTransfer.setData('text/x-rustfiles-drag-paths', JSON.stringify(paths));
+                    }}
                     aria-selected={isSelected}
                     onClick={(e) => {
                       e.stopPropagation();

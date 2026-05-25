@@ -1,4 +1,5 @@
 use crate::core::clipboard;
+use crate::core::drag;
 use crate::core::error::{AppError, ErrorCode};
 use crate::core::runtime::RuntimeGuard;
 use crate::core::scheduler::{
@@ -174,16 +175,78 @@ pub async fn paste_clipboard_operation(
 }
 
 #[tauri::command]
-pub async fn create_drag_operation() -> Result<(), AppError> {
-    Err(AppError::not_implemented())
+pub async fn create_drag_operation(
+    source_paths: Vec<String>,
+    drag_type: String,
+    source_tab_id: String,
+) -> Result<String, AppError> {
+    let test_root = RuntimeGuard::test_root();
+    for path in &source_paths {
+        crate::core::path_safety::guard_destructive_path(path, test_root.as_deref())?;
+    }
+    let op_id = drag::create_operation(source_paths, &drag_type, &source_tab_id);
+    Ok(op_id)
 }
 
 /// 危险 command：拖拽释放（默认移动），先经过测试模式 guard，再检查确认令牌
 #[tauri::command]
-pub async fn drop_drag_operation(confirmation_token: Option<String>) -> Result<(), AppError> {
+pub async fn drop_drag_operation(
+    operation_id: String,
+    target_dir: String,
+    requested_type: Option<String>,
+    confirmation_token: Option<String>,
+) -> Result<String, AppError> {
     RuntimeGuard::guard_dangerous_operation()?;
     RuntimeGuard::check_confirmation(confirmation_token)?;
-    Err(AppError::not_implemented())
+
+    let op = drag::get_operation(&operation_id).ok_or_else(|| {
+        AppError::new(ErrorCode::PathNotFound, "拖拽操作不存在或已过期")
+    })?;
+
+    if op.status != drag::DragOpStatus::Active {
+        return Err(AppError::new(
+            ErrorCode::InternalError,
+            "此拖拽操作已被使用，不能再次释放",
+        ));
+    }
+
+    let test_root = RuntimeGuard::test_root();
+
+    // 校验每个源路径是否存在
+    for src in &op.source_paths {
+        if !std::path::Path::new(src).exists() {
+            return Err(AppError::new(
+                ErrorCode::PathNotFound,
+                format!("源路径不存在: {}", src),
+            ));
+        }
+    }
+
+    // 对目标路径进行安全校验
+    crate::core::path_safety::guard_destructive_path(&target_dir, test_root.as_deref())?;
+
+    // 跨卷检测
+    let cross_volume = op.source_paths.first().map(|src| drag::is_cross_volume(src, &target_dir)).unwrap_or(false);
+
+    // 确定最终执行类型
+    let effective_type = match &requested_type {
+        Some(t) if t == "copy" => drag::DragOpType::Copy,
+        Some(t) if t == "move" => drag::DragOpType::Move,
+        _ if cross_volume => drag::DragOpType::Copy,
+        _ => op.drag_type.clone(),
+    };
+
+    let task_id = match effective_type {
+        drag::DragOpType::Copy => {
+            tasks::execute_copy_items(&op.source_paths, &target_dir, test_root.as_deref())?
+        }
+        drag::DragOpType::Move => {
+            tasks::execute_move_items(&op.source_paths, &target_dir, test_root.as_deref())?
+        }
+    };
+
+    drag::mark_dropped(&operation_id);
+    Ok(task_id.as_str().to_string())
 }
 
 /// 危险 command：冲突解决（覆盖/替换），先经过测试模式 guard，再检查确认令牌

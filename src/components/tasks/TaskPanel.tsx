@@ -86,6 +86,16 @@ function TaskPanel() {
 
                 {expanded ? (
                   <div style={{ display: 'grid', gap: 6, marginTop: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
+                    {task.kind === 'copy_items' || task.kind === 'move_items' ? (
+                      <div>
+                        {(task as any).progressTotal > 0 ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <progress max={(task as any).progressTotal} value={(task as any).progressCurrent} style={{ flex: 1 }} />
+                            <span>{Math.round(((task as any).progressCurrent / (task as any).progressTotal) * 100)}%</span>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <div>Completed items: {task.completed_items.length ? task.completed_items.join(', ') : 'None'}</div>
                     <div>Incomplete items: {task.incomplete_items.length ? task.incomplete_items.join(', ') : 'None'}</div>
                     <div>Unknown items: {task.unknown_items.length ? task.unknown_items.join(', ') : 'None'}</div>

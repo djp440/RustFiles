@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DirectoryEntry, SystemActionFeedback } from '../../api/tauri';
+import { createDragOperation, dropDragOperation } from '../../api/tauri';
 import GlassSurface from '../surfaces/GlassSurface';
 import FileGrid from './FileGrid';
 import FileList from './FileList';
@@ -595,7 +596,27 @@ function FileBrowser({
             </section>
           )}
         </div>
-        <div style={{ minHeight: 0, height: '100%' }}>{renderView()}</div>
+        <div
+          style={{ minHeight: 0, height: '100%' }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = e.ctrlKey || e.metaKey ? 'copy' : 'move';
+          }}
+          onDrop={async (e) => {
+            e.preventDefault();
+            const raw = e.dataTransfer.getData('text/x-rustfiles-drag-paths');
+            if (!raw) return;
+            try {
+              const sourcePaths: string[] = JSON.parse(raw);
+              if (sourcePaths.length === 0) return;
+              const requestedType = e.ctrlKey || e.metaKey ? 'copy' : undefined;
+              const opId = await createDragOperation(sourcePaths, requestedType ?? 'move', activeTabId);
+              await dropDragOperation(opId, path, requestedType);
+            } catch {
+              // ignore drop errors in preview mode
+            }
+          }}
+        >{renderView()}</div>
       </GlassSurface>
       {deleteTarget ? (
         <DeleteConfirmDialog
