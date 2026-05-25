@@ -56,3 +56,5 @@ Desktop.ini
 
 # Local brainstorming/mockup artifacts
 .superpowers/
+docs/cdd-frontend-e2e-review/*
+.playwright-mcp/*
